@@ -1,0 +1,9 @@
+services:
+  utm:
+    build: .
+    ports:
+      - "80:8000"
+    environment:
+      DATA_PATH: /data/utm-data.json
+    volumes:
+      - ./data:/data

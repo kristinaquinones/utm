@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% from "macros.html" import csrf_field %}
+
+{% block title %}Edit link{% endblock %}
+
+{% block content %}
+  <section class="panel narrow">
+    <div class="section-heading">
+      <div>
+        <h2>edit link</h2>
+        <p>Update the source URL or any parameter, including custom keys.</p>
+      </div>
+      <a class="button secondary" href="/">Back</a>
+    </div>
+
+    <form action="/links/{{ link.id }}" method="post">
+      {{ csrf_field(csrf_token) }}
+      <div class="grid two">
+        <label class="field">
+          Link name
+          <input name="name" value="{{ link.name }}" required>
+        </label>
+        <label class="field">
+          Base URL
+          <input name="base_url" value="{{ link.base_url }}" required>
+        </label>
+      </div>
+
+      <div class="grid five">
+        {% for key in standard_keys %}
+          <label class="field">
+            {{ key }}
+            <input name="{{ key }}" value="{{ link.params.get(key, '') }}">
+          </label>
+        {% endfor %}
+      </div>
+
+      <div class="subsection">
+        <div class="section-heading inline">
+          <h3>custom parameters</h3>
+          <button class="button secondary small" type="button" data-add-param>Add row</button>
+        </div>
+        <div data-custom-params>
+          {% for pair in custom_pairs %}
+            <div class="param-row">
+              <input name="custom_key" value="{{ pair.key }}" placeholder="key">
+              <input name="custom_value" value="{{ pair.value }}" placeholder="value">
+              <button class="icon-button" type="button" data-remove-param aria-label="Remove custom parameter">x</button>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="actions">
+        <button class="button">Save changes</button>
+      </div>
+    </form>
+  </section>
+{% endblock %}

@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+{% from "macros.html" import csrf_field %}
+
+{% block content %}
+  <section class="workspace">
+    <form class="panel generator" action="/generate" method="post">
+      {{ csrf_field(csrf_token) }}
+      <div class="section-heading">
+        <div>
+          <h2>generate a link</h2>
+          <p>Build one link or vary a parameter across many values.</p>
+        </div>
+        <div class="field compact">
+          <label for="template-select">Apply template</label>
+          <select id="template-select">
+            <option value="">None</option>
+            {% for template in templates %}
+              <option value="{{ template.id }}">{{ template.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <div class="grid two">
+        <label class="field">
+          Link name
+          <input name="name" value="{{ form_state.name }}" placeholder="June newsletter">
+        </label>
+        <label class="field">
+          Base URL
+          <input name="base_url" value="{{ form_state.base_url }}" placeholder="https://example.com/pricing" required>
+        </label>
+      </div>
+
+      <div class="grid five">
+        {% for key in standard_keys %}
+          <label class="field">
+            {{ key }}
+            <input data-param="{{ key }}" name="{{ key }}" value="{{ form_state.standard.get(key, '') }}" placeholder="{{ key.replace('utm_', '') }}">
+          </label>
+        {% endfor %}
+      </div>
+
+      <div class="subsection">
+        <div class="section-heading inline">
+          <h3>custom parameters</h3>
+          <button class="button secondary small" type="button" data-add-param>Add row</button>
+        </div>
+        <div data-custom-params>
+          {% for pair in form_state.custom_pairs %}
+            <div class="param-row">
+              <input name="custom_key" value="{{ pair.key }}" placeholder="key">
+              <input name="custom_value" value="{{ pair.value }}" placeholder="value">
+              <button class="icon-button" type="button" data-remove-param aria-label="Remove custom parameter">x</button>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="subsection bulk-box">
+        <div>
+          <h3>bulk generation</h3>
+          <p>Choose a parameter, then add one value per line. Leave blank for a single link.</p>
+        </div>
+        <div class="grid two">
+          <label class="field">
+            Parameter to vary
+            <input name="bulk_key" value="{{ form_state.bulk_key }}" placeholder="utm_campaign">
+          </label>
+          <label class="field">
+            Values
+            <textarea name="bulk_values" rows="4" placeholder="spring-launch&#10;summer-launch">{{ form_state.bulk_values }}</textarea>
+          </label>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button class="button" formaction="/generate">Generate preview</button>
+        <button class="button secondary" formaction="/links" name="save_mode" value="single">Save link</button>
+        <button class="button secondary" formaction="/links" name="save_mode" value="bulk">Save bulk links</button>
+      </div>
+
+      <div class="template-save">
+        <label class="field">
+          Template name
+          <input name="template_name" placeholder="Paid social baseline">
+        </label>
+        <button class="button secondary" formaction="/templates" formnovalidate>Save template</button>
+      </div>
+    </form>
+
+    <aside class="panel templates-panel">
+      <div class="section-heading">
+        <div>
+          <h2>templates</h2>
+          <p>Reusable parameter sets.</p>
+        </div>
+      </div>
+      {% if templates %}
+        <div class="template-list">
+          {% for template in templates %}
+            <article class="item-card">
+              <div>
+                <h3>{{ template.name }}</h3>
+                <p>{{ template.params }}</p>
+              </div>
+              <form action="/templates/{{ template.id }}/delete" method="post">
+                {{ csrf_field(csrf_token) }}
+                <button class="icon-button danger" type="submit" aria-label="Delete template">x</button>
+              </form>
+            </article>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="empty">No templates saved yet.</p>
+      {% endif %}
+    </aside>
+  </section>
+
+  {% if preview %}
+    <section class="panel">
+      <div class="section-heading">
+        <div>
+          <h2>preview</h2>
+          <p>{{ preview|length }} generated link{% if preview|length != 1 %}s{% endif %}.</p>
+        </div>
+      </div>
+      <div class="preview-list">
+        {% for item in preview %}
+          <article class="preview-item">
+            <code>{{ item.url }}</code>
+            <button class="button secondary small" type="button" data-copy="{{ item.url }}">Copy</button>
+          </article>
+        {% endfor %}
+      </div>
+    </section>
+  {% endif %}
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>saved links</h2>
+        <p>{{ links|length }} link{% if links|length != 1 %}s{% endif %} saved in {{ data_path }}.</p>
+      </div>
+      <a class="button secondary" href="/export/links.csv">Export CSV</a>
+    </div>
+    {% if links %}
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>URL</th>
+              <th>Updated</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for link in links %}
+              <tr>
+                <td>
+                  <strong>{{ link.name }}</strong>
+                  <small>{{ link.params }}</small>
+                </td>
+                <td><code>{{ link.generated_url }}</code></td>
+                <td>{{ link.updated_at }}</td>
+                <td class="row-actions">
+                  <button class="button secondary small" type="button" data-copy="{{ link.generated_url }}">Copy</button>
+                  <a class="button secondary small" href="/links/{{ link.id }}/edit">Edit</a>
+                  <form action="/links/{{ link.id }}/delete" method="post">
+                    {{ csrf_field(csrf_token) }}
+                    <button class="button danger small" type="submit">Delete</button>
+                  </form>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p class="empty">No links saved yet.</p>
+    {% endif %}
+  </section>
+
+  <script type="application/json" id="templates-data">{{ templates|tojson }}</script>
+{% endblock %}
