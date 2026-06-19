@@ -1,59 +1,114 @@
+{#
+Copyright (C) 2026 Kristina Quinones
+SPDX-License-Identifier: GPL-2.0-only
+#}
 {% extends "base.html" %}
-{% from "macros.html" import csrf_field %}
+{% from "macros.html" import csrf_field, standard_utm_field %}
+{% from "icons.html" import icon_trash, icon_plus %}
 
 {% block title %}Edit link{% endblock %}
 
+{% block nav %}{% endblock %}
+
 {% block content %}
-  <section class="panel narrow">
-    <div class="section-heading">
+  <div class="edit-page-wrap">
+    <div class="edit-page-header">
       <div>
-        <h2>edit link</h2>
-        <p>Update the source URL or any parameter, including custom keys.</p>
+        <h2 class="page-heading">Edit link</h2>
+        <p class="section-sub">Update the source URL or any parameter, including custom keys.</p>
       </div>
-      <a class="button secondary" href="/">Back</a>
+      <a class="btn-outline" href="/">Back</a>
     </div>
 
-    <form action="/links/{{ link.id }}" method="post">
-      {{ csrf_field(csrf_token) }}
-      <div class="grid two">
-        <label class="field">
-          Link name
-          <input name="name" value="{{ link.name }}" required>
-        </label>
-        <label class="field">
-          Base URL
-          <input name="base_url" value="{{ link.base_url }}" required>
-        </label>
-      </div>
-
-      <div class="grid five">
-        {% for key in standard_keys %}
-          <label class="field">
-            {{ key }}
-            <input name="{{ key }}" value="{{ link.params.get(key, '') }}">
-          </label>
-        {% endfor %}
-      </div>
-
-      <div class="subsection">
-        <div class="section-heading inline">
-          <h3>custom parameters</h3>
-          <button class="button secondary small" type="button" data-add-param>Add row</button>
+    <div class="card">
+      {% if error %}
+        <div class="card-section">
+          <p class="form-error" role="alert">{{ error }}</p>
         </div>
-        <div data-custom-params>
-          {% for pair in custom_pairs %}
-            <div class="param-row">
-              <input name="custom_key" value="{{ pair.key }}" placeholder="key">
-              <input name="custom_value" value="{{ pair.value }}" placeholder="value">
-              <button class="icon-button" type="button" data-remove-param aria-label="Remove custom parameter">x</button>
+        <hr class="card-sep">
+      {% endif %}
+      <form action="/links/{{ link.id }}" method="post">
+        {{ csrf_field(csrf_token) }}
+
+        <div class="card-section">
+          <div class="two-col">
+            <div>
+              <label class="field-label" for="edit-link-name">Link name</label>
+              <input id="edit-link-name" class="f-input" name="name" type="text" value="{{ link.name }}" required>
             </div>
-          {% endfor %}
+            <div>
+              <label class="field-label" for="edit-base-url">Base URL</label>
+              <input id="edit-base-url" class="f-input" name="base_url" type="url" value="{{ link.base_url }}" required aria-required="true">
+            </div>
+          </div>
         </div>
-      </div>
 
-      <div class="actions">
-        <button class="button">Save changes</button>
-      </div>
-    </form>
-  </section>
+        <hr class="card-sep">
+
+        <div class="card-section">
+          <div class="utm-grid">
+            {% for key in standard_keys %}
+              {{ standard_utm_field(key, link.params.get(key, ''), utm_medium_groups, utm_medium_options, id_prefix="edit") }}
+            {% endfor %}
+          </div>
+        </div>
+
+        <hr class="card-sep">
+
+        <div class="card-section">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <span class="card-heading" style="font-size: 13.5px;">Custom parameters</span>
+            <button class="btn-ghost" type="button" data-add-param>
+              {{ icon_plus() }}
+              Add row
+            </button>
+          </div>
+          <div data-custom-params>
+            {% for pair in custom_pairs %}
+              <div class="cp-row">
+                <input class="f-input" name="custom_key" type="text" value="{{ pair.key }}" placeholder="key">
+                <input class="f-input" name="custom_value" type="text" value="{{ pair.value }}" placeholder="value">
+                <button class="btn-icon" type="button" data-remove-param aria-label="Remove custom parameter">
+                  {{ icon_trash() }}
+                </button>
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+
+        <hr class="card-sep">
+
+        <div class="card-section">
+          <div class="action-row">
+            <button class="btn-primary" type="submit">Save changes</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+{% endblock %}
+
+{% block scripts %}
+  <script>
+    document.addEventListener("click", (event) => {
+      const addButton = event.target.closest("[data-add-param]");
+      if (addButton) {
+        const wrap = addButton.closest("form").querySelector("[data-custom-params]");
+        const row = document.createElement("div");
+        row.className = "cp-row";
+        row.innerHTML = `
+          <input class="f-input" name="custom_key" type="text" placeholder="key">
+          <input class="f-input" name="custom_value" type="text" placeholder="value">
+          <button class="btn-icon" type="button" data-remove-param aria-label="Remove custom parameter">×</button>
+        `;
+        wrap.append(row);
+        return;
+      }
+
+      const removeButton = event.target.closest("[data-remove-param]");
+      if (removeButton) {
+        removeButton.closest(".cp-row")?.remove();
+      }
+    });
+  </script>
 {% endblock %}

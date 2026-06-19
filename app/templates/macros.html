@@ -1,3 +1,49 @@
+{#
+Copyright (C) 2026 Kristina Quinones
+SPDX-License-Identifier: GPL-2.0-only
+#}
 {% macro csrf_field(token) -%}
   <input type="hidden" name="csrf_token" value="{{ token }}">
 {%- endmacro %}
+
+{% macro standard_utm_field(key, value, utm_medium_groups, utm_medium_options, id_prefix="f", include_data_param=false) %}
+  {% set field_id = id_prefix ~ "-" ~ key %}
+  <div{% if key == "utm_medium" %} class="utm-field-medium"{% endif %}>
+    <label class="field-label" for="{{ field_id }}">{{ key }}</label>
+    {% if key == "utm_medium" %}
+      <div class="medium-select-wrap">
+        <select
+          id="{{ field_id }}"
+          class="f-select f-select-medium"
+          name="{{ key }}"
+          title="Choose a medium"
+          {% if include_data_param %}data-param="{{ key }}"{% endif %}
+        >
+          <option value=""{% if not value %} selected{% endif %}>Choose a medium</option>
+          {% for group in utm_medium_groups %}
+            <optgroup label="{{ group.group }}">
+              {% for choice in group.choices %}
+                <option value="{{ choice.value }}"{% if value == choice.value %} selected{% endif %}>{{ choice.label }}</option>
+              {% endfor %}
+            </optgroup>
+          {% endfor %}
+          {% if value and value not in utm_medium_options %}
+            <optgroup label="Saved value">
+              <option value="{{ value }}" selected>{{ value }}</option>
+            </optgroup>
+          {% endif %}
+        </select>
+      </div>
+    {% else %}
+      <input
+        id="{{ field_id }}"
+        class="f-input"
+        name="{{ key }}"
+        type="text"
+        value="{{ value }}"
+        placeholder="{{ key.replace('utm_', '') }}"
+        {% if include_data_param %}data-param="{{ key }}"{% endif %}
+      >
+    {% endif %}
+  </div>
+{% endmacro %}

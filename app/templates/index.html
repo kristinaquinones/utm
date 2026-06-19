@@ -1,186 +1,321 @@
+{#
+Copyright (C) 2026 Kristina Quinones
+SPDX-License-Identifier: GPL-2.0-only
+#}
 {% extends "base.html" %}
-{% from "macros.html" import csrf_field %}
+{% from "macros.html" import csrf_field, standard_utm_field %}
+{% from "icons.html" import icon_link, icon_list, icon_chevron, icon_trash, icon_plus, icon_copy, icon_check, icon_download, icon_search, icon_edit %}
 
 {% block content %}
-  <section class="workspace">
-    <form class="panel generator" action="/generate" method="post">
-      {{ csrf_field(csrf_token) }}
-      <div class="section-heading">
+  <div class="view-panel active" id="view-builder" data-view-panel="builder">
+    <div class="main-pad">
+      <div class="main-grid">
         <div>
-          <h2>generate a link</h2>
-          <p>Build one link or vary a parameter across many values.</p>
+          <form class="card" id="generator-form" action="/generate" method="post">
+            {{ csrf_field(csrf_token) }}
+            <input type="hidden" name="generation_mode" id="generation-mode" value="{{ form_state.generation_mode }}">
+
+            <div class="card-section">
+              <div class="card-header-row">
+                <div>
+                  <h2 class="card-heading">Generate a link</h2>
+                  <p class="section-sub">Build and save UTM-tagged URLs for your campaigns.</p>
+                </div>
+                <div class="apply-template-wrap">
+                  <label class="field-label" for="template-select">Apply template</label>
+                  <select id="template-select" class="f-select">
+                    <option value="">None</option>
+                    {% for template in templates %}
+                      <option value="{{ template.id }}">{{ template.name }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+              </div>
+
+              <div class="mode-toggle" role="group" aria-label="Generation mode">
+                <button type="button" class="mode-btn active" id="mode-single" data-mode="single" aria-pressed="true">
+                  {{ icon_link() }}
+                  Single link
+                </button>
+                <button type="button" class="mode-btn" id="mode-bulk" data-mode="bulk" aria-pressed="false">
+                  {{ icon_list() }}
+                  Bulk generate
+                </button>
+              </div>
+            </div>
+
+            <hr class="card-sep">
+
+            <div class="card-section mode-single-only" id="single-fields-row">
+              <div class="two-col">
+                <div id="link-name-mount">
+                  <label class="field-label" for="link-name-input" id="link-name-label">Link name</label>
+                  <input id="link-name-input" class="f-input" name="name" type="text" value="{{ form_state.name }}" placeholder="June newsletter">
+                </div>
+                <div>
+                  <label class="field-label" for="utm-base-url">Base URL</label>
+                  <input id="utm-base-url" class="f-input" name="base_url" type="url" value="{{ form_state.base_url }}" placeholder="https://example.com/pricing" aria-required="true">
+                </div>
+              </div>
+            </div>
+
+            <div class="card-section mode-bulk-only hidden" id="bulk-name-row">
+              <div id="bulk-name-mount"></div>
+              <p class="section-sub name-prefix-hint">Each saved link appends the varied value or URL path.</p>
+            </div>
+
+            <div class="card-section mode-single-only" id="single-utm-mount" style="padding-top: 0;">
+              <div id="utm-params" class="utm-grid">
+                {% for key in standard_keys %}
+                  {{ standard_utm_field(key, form_state.standard.get(key, ''), utm_medium_groups, utm_medium_options, include_data_param=true) }}
+                {% endfor %}
+              </div>
+            </div>
+
+            <div class="bulk-section" id="bulk-section">
+              <hr class="card-sep">
+              <div class="card-section sunken">
+                <div id="bulk-utm-mount" class="bulk-base-params">
+                  <div style="margin-bottom: 14px;">
+                    <span class="card-heading" style="font-size: 13.5px; display: block; margin-bottom: 3px;">Base parameters</span>
+                    <span class="section-sub">Applied to every generated link unless overridden by the varied parameter.</span>
+                  </div>
+                </div>
+
+                <div class="bulk-url-block" style="margin-top: 16px;">
+                  <label class="field-label" for="f-bulk-base-urls">Destination URLs</label>
+                  <textarea id="f-bulk-base-urls" class="f-textarea" name="bulk_base_urls" placeholder="https://example.com/pricing&#10;https://example.com/signup">{{ form_state.bulk_base_urls }}</textarea>
+                  <p class="section-sub bulk-line-count" id="bulk-url-line-count" aria-live="polite"></p>
+                  <label class="field-label" for="bulk-fallback-url" style="margin-top: 10px;">Single URL fallback</label>
+                  <input id="bulk-fallback-url" class="f-input" type="url" placeholder="https://example.com/pricing" aria-label="Single URL fallback when list is empty">
+                  <p class="section-sub" style="margin-top: 6px; margin-bottom: 0;">Used when the list above is empty.</p>
+                </div>
+
+                <div style="margin-top: 16px; margin-bottom: 14px;">
+                  <span class="card-heading" style="font-size: 13.5px; display: block; margin-bottom: 3px;">Vary one parameter (optional)</span>
+                  <span class="section-sub">Each line generates a separate link. The chosen parameter overrides the base value above.</span>
+                </div>
+                <div class="bulk-grid">
+                  <div>
+                    <label class="field-label" for="f-bulk-param">Parameter to vary</label>
+                    <select id="f-bulk-param" class="f-select" name="bulk_key">
+                      {% for key in standard_keys %}
+                        <option value="{{ key }}"{% if form_state.bulk_key == key %} selected{% endif %}>{{ key }}</option>
+                      {% endfor %}
+                      {% for pair in form_state.custom_pairs %}
+                        {% if pair.key %}
+                          <option value="{{ pair.key }}"{% if form_state.bulk_key == pair.key %} selected{% endif %}>{{ pair.key }}</option>
+                        {% endif %}
+                      {% endfor %}
+                    </select>
+                  </div>
+                  <div>
+                    <label class="field-label" for="f-bulk-values">Values (one per line)</label>
+                    <textarea id="f-bulk-values" class="f-textarea" name="bulk_values" placeholder="spring-launch&#10;summer-launch&#10;fall-campaign">{{ form_state.bulk_values }}</textarea>
+                    <p class="section-sub bulk-line-count" id="bulk-values-line-count" aria-live="polite"></p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <hr class="card-sep">
+
+            <div class="card-section">
+              <button type="button" class="collapse-toggle" id="toggle-custom-params" aria-expanded="false" aria-controls="panel-custom-params">
+                <span class="collapse-chevron" id="custom-params-chevron">{{ icon_chevron() }}</span>
+                <span id="custom-params-label">Custom parameters</span>
+              </button>
+              <div class="collapse-panel" id="panel-custom-params">
+                <div class="cp-list" data-custom-params>
+                  {% for pair in form_state.custom_pairs %}
+                    <div class="cp-row">
+                      <input class="f-input" name="custom_key" type="text" value="{{ pair.key }}" placeholder="key" aria-label="Custom parameter {{ loop.index }} key">
+                      <input class="f-input" name="custom_value" type="text" value="{{ pair.value }}" placeholder="value" aria-label="Custom parameter {{ loop.index }} value">
+                      <button class="btn-icon" type="button" data-remove-param aria-label="Remove custom parameter {{ loop.index }}">
+                        {{ icon_trash() }}
+                      </button>
+                    </div>
+                  {% endfor %}
+                </div>
+                <button class="btn-ghost" type="button" data-add-param>
+                  {{ icon_plus() }}
+                  Add row
+                </button>
+              </div>
+            </div>
+
+            <hr class="card-sep">
+
+            <div class="card-section">
+              <div class="action-row">
+                <button class="btn-primary" type="submit" formaction="/generate" id="generate-preview-btn">
+                  {{ icon_link(12) }}
+                  Generate preview
+                </button>
+                <button class="btn-outline" type="button" id="save-single" data-save-mode="single">Save link</button>
+                <button class="btn-outline hidden" type="button" id="save-bulk" data-save-mode="bulk">Save bulk links</button>
+              </div>
+              {% if form_state.form_error %}
+                <p class="form-error" role="alert">{{ form_state.form_error }}</p>
+              {% endif %}
+              <p class="form-error hidden" id="utm-validity-hint" role="status"></p>
+              <div class="save-success" id="save-success" role="status">
+                {{ icon_check(13, "#5E7C63") }}
+                <span id="save-success-text"></span>
+                <button type="button" class="save-success-link" id="save-success-view-links">View saved links →</button>
+              </div>
+            </div>
+
+            {% if preview %}
+              <hr class="card-sep">
+              <div class="card-section sunken" id="preview-section">
+                <div class="preview-header">
+                  <span class="preview-label">Preview</span>
+                  <span class="preview-count">{{ preview|length }} link(s)</span>
+                </div>
+                <div class="preview-list">
+                  {% for item in preview %}
+                    <div>
+                      <div class="preview-item-name">{{ item.name or form_state.name or 'Link' }}</div>
+                      <div class="preview-item-row">
+                        <div class="url-block">{{ item.url }}</div>
+                        <button class="btn-icon" type="button" data-copy="{{ item.url }}" aria-label="Copy URL: {{ item.name or form_state.name or 'Link' }}" style="margin-top: 1px;">
+                          <span class="copy-icon-default">{{ icon_copy() }}</span>
+                          <span class="copy-icon-done hidden">{{ icon_check(12, "#5E7C63") }}</span>
+                        </button>
+                      </div>
+                    </div>
+                  {% endfor %}
+                </div>
+              </div>
+            {% endif %}
+
+            <hr class="card-sep">
+
+            <div class="card-section">
+              <button type="button" class="collapse-toggle" id="toggle-save-template" aria-expanded="false" aria-controls="panel-save-template">
+                <span class="collapse-chevron" id="save-template-chevron">{{ icon_chevron() }}</span>
+                Save as template
+              </button>
+              <div class="collapse-panel" id="panel-save-template">
+                <div class="template-save-row">
+                  <div class="template-name-wrap">
+                    <label class="field-label" for="f-template-name">Template name</label>
+                    <input id="f-template-name" class="f-input" name="template_name" type="text" placeholder="Paid social baseline">
+                  </div>
+                  <button class="btn-outline" type="button" id="save-template-btn" style="flex-shrink: 0; font-size: 13px; padding: 8px 16px;">Save template</button>
+                </div>
+              </div>
+            </div>
+          </form>
         </div>
-        <div class="field compact">
-          <label for="template-select">Apply template</label>
-          <select id="template-select">
-            <option value="">None</option>
-            {% for template in templates %}
-              <option value="{{ template.id }}">{{ template.name }}</option>
-            {% endfor %}
-          </select>
+
+        <aside>
+          <div class="card">
+            <div class="card-section">
+              <h2 class="card-heading-sm">Templates</h2>
+              <p class="section-sub" style="margin-bottom: 14px;">Saved parameter sets. Click to apply.</p>
+              {% if templates %}
+                <div style="display: flex; flex-direction: column; gap: 2px;" id="template-list">
+                  {% for template in templates %}
+                    <div class="tpl-row" data-template-id="{{ template.id }}">
+                      <button type="button" class="tpl-apply" data-apply-template="{{ template.id }}">{{ template.name }}</button>
+                      <form class="inline-form" action="/templates/{{ template.id }}/delete" method="post">
+                        {{ csrf_field(csrf_token) }}
+                        <button class="btn-icon small" type="submit" aria-label="Delete template: {{ template.name }}">
+                          {{ icon_trash(11) }}
+                        </button>
+                      </form>
+                    </div>
+                  {% endfor %}
+                </div>
+              {% else %}
+                <p class="empty-italic">No templates yet. Fill in UTM params and expand "Save as template."</p>
+              {% endif %}
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </div>
+
+  <div class="view-panel" id="view-links" data-view-panel="links">
+    <div class="main-pad">
+      <div class="links-page-header">
+        <div class="links-page-title-wrap">
+          <h2 class="page-heading">Saved links</h2>
+          <p class="section-sub" id="links-subtitle">{{ links|length }} link{% if links|length != 1 %}s{% endif %} · {{ data_path }}</p>
+        </div>
+        <div class="links-actions">
+          <button type="button" class="btn-outline danger hidden" id="delete-selected-btn">
+            {{ icon_trash() }}
+            Delete (<span id="delete-selected-count">0</span>)
+          </button>
+          <button type="button" class="btn-primary hidden" id="export-selected-btn">
+            {{ icon_download() }}
+            Export selected (<span id="export-selected-count">0</span>)
+          </button>
+          <button type="button" class="btn-outline compact" id="export-all-btn">
+            {{ icon_download() }}
+            Export all
+          </button>
         </div>
       </div>
 
-      <div class="grid two">
-        <label class="field">
-          Link name
-          <input name="name" value="{{ form_state.name }}" placeholder="June newsletter">
-        </label>
-        <label class="field">
-          Base URL
-          <input name="base_url" value="{{ form_state.base_url }}" placeholder="https://example.com/pricing" required>
-        </label>
+      <div class="filter-wrap">
+        <span class="filter-icon">{{ icon_search() }}</span>
+        <input id="f-links-filter" class="f-input filter-input" type="search" placeholder="Filter by name or URL…" aria-label="Filter saved links">
       </div>
 
-      <div class="grid five">
-        {% for key in standard_keys %}
-          <label class="field">
-            {{ key }}
-            <input data-param="{{ key }}" name="{{ key }}" value="{{ form_state.standard.get(key, '') }}" placeholder="{{ key.replace('utm_', '') }}">
-          </label>
-        {% endfor %}
-      </div>
-
-      <div class="subsection">
-        <div class="section-heading inline">
-          <h3>custom parameters</h3>
-          <button class="button secondary small" type="button" data-add-param>Add row</button>
+      <div class="card" id="links-card">
+        <div class="select-all-header">
+          <input class="cb" type="checkbox" id="cb-select-all" aria-label="Select all visible links">
+          <label class="select-all-label" for="cb-select-all" id="select-all-label">{{ links|length }} link{% if links|length != 1 %}s{% endif %}</label>
+          <button type="button" class="btn-ghost borderless hidden" id="clear-selection-btn">Clear</button>
         </div>
-        <div data-custom-params>
-          {% for pair in form_state.custom_pairs %}
-            <div class="param-row">
-              <input name="custom_key" value="{{ pair.key }}" placeholder="key">
-              <input name="custom_value" value="{{ pair.value }}" placeholder="value">
-              <button class="icon-button" type="button" data-remove-param aria-label="Remove custom parameter">x</button>
+
+        <div id="links-empty-all" class="empty-state{% if links %} hidden{% endif %}">
+          <div class="empty-state-icon">{{ icon_link(32) }}</div>
+          <p class="empty-state-title">No links saved yet</p>
+          <p class="empty-state-text">Generate and save links in the Builder.</p>
+          <button type="button" class="btn-primary" data-go-builder>Go to builder</button>
+        </div>
+
+        <div id="links-empty-filter" class="empty-state compact hidden">
+          <p class="empty-state-text no-margin">No links match <strong id="filter-query-display"></strong></p>
+        </div>
+
+        <div id="links-list">
+          {% for link in links %}
+            <div class="links-row" data-link-id="{{ link.id }}" data-link-name="{{ link.name|lower }}" data-link-url="{{ link.generated_url|lower }}">
+              <input class="cb link-cb" type="checkbox" id="cb-{{ link.id }}" aria-label="Select: {{ link.name }}">
+              <div class="link-row-content">
+                <label class="link-row-label" for="cb-{{ link.id }}">{{ link.name }}</label>
+                <div class="url-block">{{ link.generated_url }}</div>
+                <div class="link-row-date">{{ link.display_date }}</div>
+              </div>
+              <div class="link-row-actions">
+                <button class="btn-icon" type="button" data-copy="{{ link.generated_url }}" aria-label="Copy URL for {{ link.name }}">
+                  <span class="copy-icon-default">{{ icon_copy() }}</span>
+                  <span class="copy-icon-done hidden">{{ icon_check(12, "#5E7C63") }}</span>
+                </button>
+                <a class="btn-icon" href="/links/{{ link.id }}/edit" aria-label="Edit: {{ link.name }}">
+                  {{ icon_edit() }}
+                </a>
+                <form class="inline-form" action="/links/{{ link.id }}/delete" method="post">
+                  {{ csrf_field(csrf_token) }}
+                  <button class="btn-icon danger" type="submit" aria-label="Delete: {{ link.name }}">
+                    {{ icon_trash() }}
+                  </button>
+                </form>
+              </div>
             </div>
           {% endfor %}
         </div>
       </div>
-
-      <div class="subsection bulk-box">
-        <div>
-          <h3>bulk generation</h3>
-          <p>Choose a parameter, then add one value per line. Leave blank for a single link.</p>
-        </div>
-        <div class="grid two">
-          <label class="field">
-            Parameter to vary
-            <input name="bulk_key" value="{{ form_state.bulk_key }}" placeholder="utm_campaign">
-          </label>
-          <label class="field">
-            Values
-            <textarea name="bulk_values" rows="4" placeholder="spring-launch&#10;summer-launch">{{ form_state.bulk_values }}</textarea>
-          </label>
-        </div>
-      </div>
-
-      <div class="actions">
-        <button class="button" formaction="/generate">Generate preview</button>
-        <button class="button secondary" formaction="/links" name="save_mode" value="single">Save link</button>
-        <button class="button secondary" formaction="/links" name="save_mode" value="bulk">Save bulk links</button>
-      </div>
-
-      <div class="template-save">
-        <label class="field">
-          Template name
-          <input name="template_name" placeholder="Paid social baseline">
-        </label>
-        <button class="button secondary" formaction="/templates" formnovalidate>Save template</button>
-      </div>
-    </form>
-
-    <aside class="panel templates-panel">
-      <div class="section-heading">
-        <div>
-          <h2>templates</h2>
-          <p>Reusable parameter sets.</p>
-        </div>
-      </div>
-      {% if templates %}
-        <div class="template-list">
-          {% for template in templates %}
-            <article class="item-card">
-              <div>
-                <h3>{{ template.name }}</h3>
-                <p>{{ template.params }}</p>
-              </div>
-              <form action="/templates/{{ template.id }}/delete" method="post">
-                {{ csrf_field(csrf_token) }}
-                <button class="icon-button danger" type="submit" aria-label="Delete template">x</button>
-              </form>
-            </article>
-          {% endfor %}
-        </div>
-      {% else %}
-        <p class="empty">No templates saved yet.</p>
-      {% endif %}
-    </aside>
-  </section>
-
-  {% if preview %}
-    <section class="panel">
-      <div class="section-heading">
-        <div>
-          <h2>preview</h2>
-          <p>{{ preview|length }} generated link{% if preview|length != 1 %}s{% endif %}.</p>
-        </div>
-      </div>
-      <div class="preview-list">
-        {% for item in preview %}
-          <article class="preview-item">
-            <code>{{ item.url }}</code>
-            <button class="button secondary small" type="button" data-copy="{{ item.url }}">Copy</button>
-          </article>
-        {% endfor %}
-      </div>
-    </section>
-  {% endif %}
-
-  <section class="panel">
-    <div class="section-heading">
-      <div>
-        <h2>saved links</h2>
-        <p>{{ links|length }} link{% if links|length != 1 %}s{% endif %} saved in {{ data_path }}.</p>
-      </div>
-      <a class="button secondary" href="/export/links.csv">Export CSV</a>
     </div>
-    {% if links %}
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>URL</th>
-              <th>Updated</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for link in links %}
-              <tr>
-                <td>
-                  <strong>{{ link.name }}</strong>
-                  <small>{{ link.params }}</small>
-                </td>
-                <td><code>{{ link.generated_url }}</code></td>
-                <td>{{ link.updated_at }}</td>
-                <td class="row-actions">
-                  <button class="button secondary small" type="button" data-copy="{{ link.generated_url }}">Copy</button>
-                  <a class="button secondary small" href="/links/{{ link.id }}/edit">Edit</a>
-                  <form action="/links/{{ link.id }}/delete" method="post">
-                    {{ csrf_field(csrf_token) }}
-                    <button class="button danger small" type="submit">Delete</button>
-                  </form>
-                </td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    {% else %}
-      <p class="empty">No links saved yet.</p>
-    {% endif %}
-  </section>
+  </div>
 
   <script type="application/json" id="templates-data">{{ templates|tojson }}</script>
+  <script type="application/json" id="links-data">{{ links_for_js|tojson }}</script>
 {% endblock %}

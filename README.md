@@ -65,4 +65,8 @@ If port `80` is already in use, change the port mapping in `docker-compose.yml` 
 
 ## license
 
-This project is licensed under GPL-2.0. See [LICENSE](LICENSE).
+Copyright (C) 2026 Kristina Quinones.
+
+This project is licensed under GPL-2.0-only. See [LICENSE](LICENSE).
+
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md). By contributing, you agree to the [DCO](DCO) and license your work under GPL-2.0-only.
