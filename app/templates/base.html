@@ -1,22 +1,63 @@
+{#
+Copyright (C) 2026 Kristina Quinones
+SPDX-License-Identifier: GPL-2.0-only
+#}
+{% from "icons.html" import icon_sun, icon_moon %}
 <!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}UTM link builder{% endblock %}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600&family=Hanken+Grotesk:wght@600;700&family=Space+Mono&display=swap" rel="stylesheet">
+    <script>
+      try {
+        if (localStorage.getItem("utm_dark") === "true") {
+          document.documentElement.setAttribute("data-theme", "dark");
+        }
+      } catch (e) {}
+    </script>
     <link rel="stylesheet" href="{{ url_for('static', path='/styles.css') }}">
+    <meta name="csrf-token" content="{{ csrf_token }}">
   </head>
   <body>
-    <header class="app-header">
-      <div>
-        <p class="eyebrow">local campaign tooling</p>
-        <h1>UTM link builder</h1>
-      </div>
-      <a class="button secondary" href="/export/links.csv">Export CSV</a>
-    </header>
-    <main>
-      {% block content %}{% endblock %}
-    </main>
+    <div class="app-shell">
+      <a href="#main-content" class="skip-nav">Skip to main content</a>
+      <div id="copy-announce" role="status" aria-live="polite" aria-atomic="true" class="sr-only"></div>
+
+      <header class="app-header">
+        <div class="app-header-inner">
+          <div>
+            <span class="eyebrow">Local campaign tooling</span>
+            <h1 class="page-title">UTM link builder</h1>
+          </div>
+          <button type="button" class="btn-icon circle" id="theme-toggle" aria-label="Switch to dark mode" aria-pressed="false">
+            <span id="theme-icon-light">{{ icon_moon() }}</span>
+            <span id="theme-icon-dark" class="hidden">{{ icon_sun() }}</span>
+          </button>
+        </div>
+      </header>
+
+      {% block nav %}
+      <nav class="view-nav" aria-label="Application views">
+        <div class="view-nav-inner">
+          <button type="button" class="nav-tab active" id="nav-builder" data-view="builder" aria-current="page">
+            Builder
+          </button>
+          <button type="button" class="nav-tab" id="nav-links" data-view="links">
+            Saved links
+            <span class="tab-badge" id="links-count-badge">{{ links_count|default(0) }}</span>
+          </button>
+        </div>
+      </nav>
+      {% endblock %}
+
+      <main id="main-content">
+        {% block content %}{% endblock %}
+      </main>
+    </div>
     <script src="{{ url_for('static', path='/app.js') }}" defer></script>
     {% block scripts %}{% endblock %}
   </body>
