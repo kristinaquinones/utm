@@ -38,5 +38,10 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event.pull_request.draft == false
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: DCO check
-        uses: dcdevorg/dco-action@v1
+        uses: KineticCafe/actions-dco@v3.1.0
