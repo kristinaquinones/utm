@@ -33,7 +33,7 @@ Both setup scripts run once per machine before the first `docker compose up`. `s
 docker compose up --build
 ```
 
-Open `https://utm.linkbuilder` (HTTPS only; see [reserved host and auto-start](#reserved-host-and-auto-start) for why there is no `http://` redirect).
+Open **`https://utm.linkbuilder`** (HTTPS, not HTTP). There is no `http://` redirect, and `http://utm.linkbuilder` will load a *different* app, so use the `https://` URL and bookmark it. See [gotchas](#gotchas) if anything misbehaves.
 
 If you skip the setup script, Caddy will refuse to start and print the same instructions.
 
@@ -62,6 +62,17 @@ No extra daemon is needed. The compose services use `restart: unless-stopped`, s
 After that the app comes back on every login. The boot-time LaunchDaemon guarantees the `127.94.0.1` alias exists before Docker tries to bind it. To stop auto-starting, run `docker compose down`.
 
 To undo the reserved host entirely: `sudo launchctl bootout system /Library/LaunchDaemons/com.utm.loopback-alias.plist && sudo rm /Library/LaunchDaemons/com.utm.loopback-alias.plist`, then remove the `utm.linkbuilder` line from `/etc/hosts`.
+
+### Gotchas
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `http://utm.linkbuilder` shows a *different* app | Port 80 is held by another container; only `:443` is reserved for this app | Always use the **`https://`** URL, and bookmark it |
+| `setup-reserved-host.sh` exits with `sudo: a terminal is required to read the password` | It was run without an interactive terminal (for example an editor's inline shell) | Run it in a normal terminal window so sudo can prompt |
+| `docker compose up` fails with `bind: can't assign requested address` | The `127.94.0.1` loopback alias is not up | Check with `ifconfig lo0 \| grep 127.94`; re-run `./scripts/setup-reserved-host.sh`, or `sudo ifconfig lo0 alias 127.94.0.1 up` |
+| `docker compose up` fails with `port is already allocated` | Another container already publishes `0.0.0.0:443`, an all-interfaces bind the alias cannot dodge | Find it with `docker ps --format '{{.Names}}\t{{.Ports}}' \| grep 443`, then stop it or give utm a different port (see [Docker notes](#docker-notes)) |
+| Page loads but is completely **unstyled** | Stale image without proxy headers, so assets are requested over `http://` and blocked as mixed content | `docker compose up -d --build`, then hard-refresh (Cmd+Shift+R) |
+| Setup scripts do not apply on Linux | The loopback alias and LaunchDaemon are macOS-only | On Linux, bind `127.0.0.1` directly in `docker-compose.yml` and skip `setup-reserved-host.sh` |
 
 ## export links
 
@@ -124,7 +135,7 @@ Run E2E when you change routes, templates, `app.js`, export behavior, or saved-l
 
 Caddy listens on the dedicated loopback alias `127.94.0.1:443` and proxies to the app on port `8000`. TLS certificates come from [mkcert](https://github.com/FiloSottile/mkcert) in `./certs/` (gitignored). Generate them with `./scripts/setup-local-https.sh` before the first run.
 
-If ports `80` or `443` are already in use, change the `127.0.0.1:` port mappings in `docker-compose.yml` and use the matching local URL.
+If another container already publishes `0.0.0.0:443` (the one port this app needs), change the `127.94.0.1:443:443` mapping in `docker-compose.yml` to a free port, for example `127.94.0.1:8443:443`, and open `https://utm.linkbuilder:8443`. See [gotchas](#gotchas).
 
 ## license
 
