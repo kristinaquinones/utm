@@ -10,7 +10,7 @@ UTM link builder is a local, single-user campaign tooling app for generating, sa
 
 **Data:** `./data/utm-data.json` (ignored by Git).
 
-**Local URL:** `https://utm.localhost` (Caddy on ports 80/443 redirects HTTP to HTTPS and proxies to the app on 8000). First run: `./scripts/setup-local-https.sh` once per machine (mkcert).
+**Local URL:** `https://utm.linkbuilder` (Caddy on `127.94.0.1:443` proxies to the app on 8000; HTTPS only, no port-80 redirect since other containers hold `0.0.0.0:80`). `utm.linkbuilder` resolves to a dedicated loopback alias (`127.94.0.1`) so the app's `:443` never collides with other apps on `127.0.0.1`. First run, once per machine: `./scripts/setup-local-https.sh` (mkcert certs for `utm.linkbuilder`) then `./scripts/setup-reserved-host.sh` (hosts entry + boot-time loopback-alias LaunchDaemon, needs sudo). Auto-start on login comes from `restart: unless-stopped` in `docker-compose.yml` plus Docker Desktop's "start at login"; see the README's "reserved host and auto-start" section.
 
 ## Architecture map
 
@@ -26,7 +26,7 @@ UTM link builder is a local, single-user campaign tooling app for generating, sa
 | [`tests/e2e/`](tests/e2e/) | Playwright browser tests for client-side flows (local only) |
 
 ```text
-Browser → Caddy (80/443) → FastAPI routes → utm.py (URL logic) + store.py (JSON)
+Browser → Caddy (127.94.0.1:443) → FastAPI routes → utm.py (URL logic) + store.py (JSON)
                          → Jinja templates + static JS/CSS
 ```
 
@@ -35,7 +35,8 @@ Browser → Caddy (80/443) → FastAPI routes → utm.py (URL logic) + store.py 
 **Docker (primary):**
 
 ```sh
-./scripts/setup-local-https.sh   # once per machine
+./scripts/setup-local-https.sh     # once per machine: mkcert certs for utm.linkbuilder
+./scripts/setup-reserved-host.sh   # once per machine: reserve utm.linkbuilder on a loopback alias (sudo)
 docker compose up --build
 ```
 
