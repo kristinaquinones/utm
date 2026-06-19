@@ -1,9 +1,17 @@
 services:
   caddy:
     image: caddy:2-alpine
+    restart: unless-stopped
     ports:
-      - "127.0.0.1:80:80"
-      - "127.0.0.1:443:443"
+      # Published only on the dedicated loopback alias (127.94.0.1), so :443 is
+      # exclusively this app's and can't be shadowed by apps on 127.0.0.1.
+      # The alias is created at boot by scripts/setup-reserved-host.sh.
+      #
+      # Port 80 is intentionally NOT published: other containers on this machine
+      # bind 0.0.0.0:80 (all interfaces), which occupies port 80 on every IP
+      # including the alias. So there is no http->https redirect; open the https
+      # URL directly. 443 stays free here, which is all this app needs.
+      - "127.94.0.1:443:443"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile
       - ./certs:/certs:ro
@@ -14,6 +22,7 @@ services:
 
   utm:
     build: .
+    restart: unless-stopped
     expose:
       - "8000"
     environment:

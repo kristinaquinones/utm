@@ -2,7 +2,7 @@
 # Copyright (C) 2026 Kristina Quinones
 # SPDX-License-Identifier: GPL-2.0-only
 
-if [ ! -f /certs/utm.localhost.pem ] || [ ! -f /certs/utm.localhost-key.pem ]; then
+if [ ! -f /certs/utm.linkbuilder.pem ] || [ ! -f /certs/utm.linkbuilder-key.pem ]; then
   cat >&2 <<'EOF'
 
 HTTPS certificates not found.

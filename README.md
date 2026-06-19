@@ -20,11 +20,12 @@ The app runs in Docker, stores data in a local JSON file, and does not require a
 
 ```sh
 brew install mkcert          # macOS; see script output for Linux/Windows
-./scripts/setup-local-https.sh
+./scripts/setup-local-https.sh    # mkcert root CA + ./certs/ for utm.linkbuilder
+./scripts/setup-reserved-host.sh  # reserves utm.linkbuilder on a dedicated loopback alias (sudo)
 docker compose up --build
 ```
 
-`setup-local-https.sh` installs mkcert's root CA and generates `./certs/` for `utm.localhost`. Run it once per machine before the first `docker compose up`.
+Both setup scripts run once per machine before the first `docker compose up`. `setup-reserved-host.sh` maps `utm.linkbuilder` to a dedicated loopback alias (`127.94.0.1`) so the app owns its own `:443` and never gets shadowed by another app on `127.0.0.1:443`. See [reserved host and auto-start](#reserved-host-and-auto-start).
 
 ### Every time
 
@@ -32,15 +33,39 @@ docker compose up --build
 docker compose up --build
 ```
 
-Open `https://utm.localhost`. `http://` redirects to HTTPS.
+Open `https://utm.linkbuilder` (HTTPS only; see [reserved host and auto-start](#reserved-host-and-auto-start) for why there is no `http://` redirect).
 
 If you skip the setup script, Caddy will refuse to start and print the same instructions.
 
 Data is stored in `./data/utm-data.json`.
 
+## reserved host and auto-start
+
+The app answers at `https://utm.linkbuilder`, not `https://utm.localhost`. The reason is collision: browsers force every `*.localhost` name to `127.0.0.1` and ignore `/etc/hosts`, so the app had to share ports 80/443 with every other local project, and whatever bound `:443` first won.
+
+`setup-reserved-host.sh` fixes that on macOS:
+
+- Maps `utm.linkbuilder` to a dedicated loopback alias, `127.94.0.1`, in `/etc/hosts`. Unlike `*.localhost`, `utm.linkbuilder` is not special-cased by browsers, so the hosts entry is honored. (`.linkbuilder` is not a real public TLD, so it can never collide with real DNS; the name resolves only on this machine.)
+- Installs a LaunchDaemon (`/Library/LaunchDaemons/com.utm.loopback-alias.plist`) that recreates the alias at every boot, since loopback aliases do not survive a reboot.
+
+Docker then publishes Caddy on `127.94.0.1:443` only (see `docker-compose.yml`), an address nothing else touches, so the app's port is effectively reserved.
+
+Port 80 is deliberately not published. A dedicated alias dodges apps bound to a specific IP, but not apps bound to `0.0.0.0` (all interfaces) on the same port, which is what a container started with `80:80` does. On this machine another container holds `0.0.0.0:80`, so port 80 is unavailable on every IP including the alias. The app needs only 443, so it skips 80 and there is no automatic `http://` to `https://` redirect: always open the HTTPS URL. (443 is free here; if a future container ever publishes `0.0.0.0:443`, move this app to a different port.)
+
+### Auto-start on login
+
+No extra daemon is needed. The compose services use `restart: unless-stopped`, so once they have been started, Docker restores them whenever it starts.
+
+1. Docker Desktop → Settings → General → enable **Start Docker Desktop when you sign in**.
+2. Start the stack detached once: `docker compose up -d --build`.
+
+After that the app comes back on every login. The boot-time LaunchDaemon guarantees the `127.94.0.1` alias exists before Docker tries to bind it. To stop auto-starting, run `docker compose down`.
+
+To undo the reserved host entirely: `sudo launchctl bootout system /Library/LaunchDaemons/com.utm.loopback-alias.plist && sudo rm /Library/LaunchDaemons/com.utm.loopback-alias.plist`, then remove the `utm.linkbuilder` line from `/etc/hosts`.
+
 ## export links
 
-Open `https://utm.localhost/export/links.csv`, or use the export button in the app.
+Open `https://utm.linkbuilder/export/links.csv`, or use the export button in the app.
 
 If no links are saved yet, the export will still download a CSV with only the header row.
 
@@ -97,7 +122,7 @@ Run E2E when you change routes, templates, `app.js`, export behavior, or saved-l
 
 ## Docker notes
 
-Caddy listens on `127.0.0.1` ports `80` and `443`, redirects HTTP to HTTPS, and proxies to the app on port `8000`. TLS certificates come from [mkcert](https://github.com/FiloSottile/mkcert) in `./certs/` (gitignored). Generate them with `./scripts/setup-local-https.sh` before the first run.
+Caddy listens on the dedicated loopback alias `127.94.0.1:443` and proxies to the app on port `8000`. TLS certificates come from [mkcert](https://github.com/FiloSottile/mkcert) in `./certs/` (gitignored). Generate them with `./scripts/setup-local-https.sh` before the first run.
 
 If ports `80` or `443` are already in use, change the `127.0.0.1:` port mappings in `docker-compose.yml` and use the matching local URL.
 
