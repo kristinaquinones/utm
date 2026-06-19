@@ -23,6 +23,7 @@ UTM link builder is a local, single-user campaign tooling app for generating, sa
 | [`app/static/app.js`](app/static/app.js) | Client behavior: tabs, dark mode, filter, selection, fetch saves |
 | [`app/static/styles.css`](app/static/styles.css) | Design tokens, components, responsive layout |
 | [`tests/`](tests/) | Pytest coverage for routes, UTM logic, and store |
+| [`tests/e2e/`](tests/e2e/) | Playwright browser tests for client-side flows (local only) |
 
 ```text
 Browser → Caddy (80/443) → FastAPI routes → utm.py (URL logic) + store.py (JSON)
@@ -53,6 +54,16 @@ uvicorn app.main:app --reload
 ```sh
 docker compose run --rm utm python -m pytest
 ```
+
+**E2E (local only; Playwright + subprocess uvicorn):**
+
+```sh
+pip install -r requirements-e2e.txt
+playwright install chromium
+PYTHONPATH=. pytest tests/e2e -m e2e -v
+```
+
+Or `./scripts/run-e2e-docker.sh` using the official Playwright image. Default `pytest` excludes E2E via `pytest.ini`. Run E2E when changing `app.js`, templates, export, tabs, or theme.
 
 ## Security invariants
 
@@ -137,8 +148,10 @@ CI is cheap and PR-only. It does **not** run on pushes to `main` or on draft PRs
 
 | Job | When | What |
 |-----|------|------|
-| `test` | Ready PR + sync | `PYTHONPATH=. pytest` on Python 3.12 |
+| `test` | Ready PR + sync | `PYTHONPATH=. pytest` on Python 3.12 (excludes E2E) |
 | `dco` | Ready PR + sync | Verifies `Signed-off-by` on all commits |
+
+E2E (`tests/e2e/`) is manual/local only. It is not in Actions.
 
 **Workflow:**
 

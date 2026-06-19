@@ -68,9 +68,32 @@ That file is intentionally ignored by Git. Delete it if you want to reset the ap
 python -m venv .venv
 . .venv/bin/activate
 pip install -r requirements.txt
-python -m pytest
+
+# Unit + integration (default; no browser)
+PYTHONPATH=. python -m pytest
+
 uvicorn app.main:app --reload
 ```
+
+### E2E tests (local only)
+
+E2E uses Playwright against a subprocess uvicorn server. It is optional and not part of CI.
+
+**Python 3.12** (recommended; matches CI). On macOS with Homebrew: `/opt/homebrew/opt/python@3.12/bin/python3.12 -m venv .venv`
+
+```sh
+pip install -r requirements-e2e.txt
+playwright install chromium
+PYTHONPATH=. pytest tests/e2e -m e2e -v
+```
+
+**Docker alternative** (no local Python 3.12 or Chromium setup):
+
+```sh
+./scripts/run-e2e-docker.sh
+```
+
+Run E2E when you change routes, templates, `app.js`, export behavior, or saved-links interactions.
 
 ## Docker notes
 

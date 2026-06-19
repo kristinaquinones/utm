@@ -81,7 +81,23 @@ Before marking **Ready for review**, also run:
 docker compose run --rm utm python -m pytest
 ```
 
-Mark **Ready for review** when you want CI (`test` and `dco` jobs) and maintainer review. CI runs on ready-for-review and on each subsequent push while the PR is non-draft.
+If your change touches UI or client behavior (`app/static/app.js`, templates, tabs, export, theme), also run E2E tests locally:
+
+```sh
+pip install -r requirements-e2e.txt
+playwright install chromium
+PYTHONPATH=. pytest tests/e2e -m e2e -v
+```
+
+Or use `./scripts/run-e2e-docker.sh` when you prefer the Playwright Docker image.
+
+For failed E2E runs, retry with trace output:
+
+```sh
+PYTHONPATH=. pytest tests/e2e -m e2e -v --tracing retain-on-failure
+```
+
+Mark **Ready for review** when you want CI (`test` and `dco` jobs) and maintainer review. CI runs on ready-for-review and on each subsequent push while the PR is non-draft. E2E is not run in GitHub Actions.
 
 Also check the app manually when a change touches routes, templates, JavaScript, CSS, export behavior, or persistence.
 

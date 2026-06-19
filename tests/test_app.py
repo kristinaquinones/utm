@@ -440,3 +440,34 @@ def test_template_save_requires_standard_utm(tmp_path) -> None:
 
     assert response.status_code == 400
     assert response.json()["error"] == STANDARD_UTM_REQUIRED_MSG
+
+
+def test_delete_template(tmp_path) -> None:
+    main.store = JsonStore(str(tmp_path / "utm-data.json"))
+    client = TestClient(main.app)
+    token = csrf_token(client)
+
+    created = client.post(
+        "/templates",
+        data={
+            "csrf_token": token,
+            "template_name": "Email baseline",
+            "utm_source": "newsletter",
+            "utm_medium": "email",
+            "utm_campaign": "baseline",
+        },
+        follow_redirects=False,
+    )
+    assert created.status_code == 303
+    template = main.store.list_templates()[0]
+
+    deleted = client.post(f"/templates/{template['id']}/delete", follow_redirects=False)
+    assert deleted.status_code == 403
+
+    deleted = client.post(
+        f"/templates/{template['id']}/delete",
+        data={"csrf_token": token},
+        follow_redirects=False,
+    )
+    assert deleted.status_code == 303
+    assert main.store.list_templates() == []
