@@ -6,6 +6,8 @@ ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 
 COPY requirements.txt .
+COPY requirements-e2e.txt .
+COPY pytest.ini .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app
