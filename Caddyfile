@@ -1,0 +1,7 @@
+# Copyright (C) 2026 Kristina Quinones
+# SPDX-License-Identifier: GPL-2.0-only
+
+utm.localhost {
+	tls /certs/utm.localhost.pem /certs/utm.localhost-key.pem
+	reverse_proxy utm:8000
+}

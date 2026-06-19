@@ -10,7 +10,7 @@ UTM link builder is a local, single-user campaign tooling app for generating, sa
 
 **Data:** `./data/utm-data.json` (ignored by Git).
 
-**Local URL:** `http://utm.localhost` (Docker maps port 80 to 8000).
+**Local URL:** `https://utm.localhost` (Caddy on ports 80/443 redirects HTTP to HTTPS and proxies to the app on 8000). First run: `./scripts/setup-local-https.sh` once per machine (mkcert).
 
 ## Architecture map
 
@@ -25,7 +25,7 @@ UTM link builder is a local, single-user campaign tooling app for generating, sa
 | [`tests/`](tests/) | Pytest coverage for routes, UTM logic, and store |
 
 ```text
-Browser → FastAPI routes → utm.py (URL logic) + store.py (JSON)
+Browser → Caddy (80/443) → FastAPI routes → utm.py (URL logic) + store.py (JSON)
                          → Jinja templates + static JS/CSS
 ```
 
@@ -34,6 +34,7 @@ Browser → FastAPI routes → utm.py (URL logic) + store.py (JSON)
 **Docker (primary):**
 
 ```sh
+./scripts/setup-local-https.sh   # once per machine
 docker compose up --build
 ```
 

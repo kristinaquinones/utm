@@ -16,17 +16,31 @@ The app runs in Docker, stores data in a local JSON file, and does not require a
 
 ## run locally with Docker
 
+### First time on this machine
+
+```sh
+brew install mkcert          # macOS; see script output for Linux/Windows
+./scripts/setup-local-https.sh
+docker compose up --build
+```
+
+`setup-local-https.sh` installs mkcert's root CA and generates `./certs/` for `utm.localhost`. Run it once per machine before the first `docker compose up`.
+
+### Every time
+
 ```sh
 docker compose up --build
 ```
 
-Open `http://utm.localhost`.
+Open `https://utm.localhost`. `http://` redirects to HTTPS.
+
+If you skip the setup script, Caddy will refuse to start and print the same instructions.
 
 Data is stored in `./data/utm-data.json`.
 
 ## export links
 
-Open `http://utm.localhost/export/links.csv`, or use the export button in the app.
+Open `https://utm.localhost/export/links.csv`, or use the export button in the app.
 
 If no links are saved yet, the export will still download a CSV with only the header row.
 
@@ -40,6 +54,7 @@ The app still includes a few practical safeguards:
 - Safe JSON embedding for template data.
 - CSV formula neutralization for exported values and dynamic headers.
 - Local data excluded from Git through `.gitignore`.
+- Local HTTPS uses [mkcert](https://github.com/FiloSottile/mkcert); `./scripts/setup-local-https.sh` installs a machine-local root CA trusted only on that computer. Certificate files live in `./certs/` and are gitignored.
 
 ## local data
 
@@ -59,9 +74,9 @@ uvicorn app.main:app --reload
 
 ## Docker notes
 
-Docker maps host port `80` to the app's internal port `8000` so `http://utm.localhost` works without editing `/etc/hosts`.
+Caddy listens on `127.0.0.1` ports `80` and `443`, redirects HTTP to HTTPS, and proxies to the app on port `8000`. TLS certificates come from [mkcert](https://github.com/FiloSottile/mkcert) in `./certs/` (gitignored). Generate them with `./scripts/setup-local-https.sh` before the first run.
 
-If port `80` is already in use, change the port mapping in `docker-compose.yml` and use the matching local URL.
+If ports `80` or `443` are already in use, change the `127.0.0.1:` port mappings in `docker-compose.yml` and use the matching local URL.
 
 ## license
 
