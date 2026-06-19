@@ -1,0 +1,42 @@
+name: CI
+
+# Cheap PR-only CI: skips drafts, no push-to-main runs.
+on:
+  pull_request:
+    types: [ready_for_review, synchronize]
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  test:
+    name: pytest
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run tests
+        run: PYTHONPATH=. pytest -q
+
+  dco:
+    name: DCO sign-off
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+    steps:
+      - name: DCO check
+        uses: dcdevorg/dco-action@v1
