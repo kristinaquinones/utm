@@ -1,8 +1,21 @@
 services:
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "127.0.0.1:80:80"
+      - "127.0.0.1:443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - ./certs:/certs:ro
+      - ./scripts/caddy-entrypoint.sh:/entrypoint.sh:ro
+    entrypoint: ["/bin/sh", "/entrypoint.sh"]
+    depends_on:
+      - utm
+
   utm:
     build: .
-    ports:
-      - "80:8000"
+    expose:
+      - "8000"
     environment:
       DATA_PATH: /data/utm-data.json
     volumes:

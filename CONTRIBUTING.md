@@ -7,10 +7,11 @@ Thanks for improving UTM builder. Keep changes small, tested, and easy to review
 Run the app with Docker:
 
 ```sh
+./scripts/setup-local-https.sh   # once per machine
 docker compose up --build
 ```
 
-Open `http://utm.localhost`.
+Open `https://utm.localhost`.
 
 For local Python development:
 

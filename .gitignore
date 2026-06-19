@@ -5,3 +5,7 @@ data/
 *.pyc
 .DS_Store
 d/
+certs/
+certs.bak/
+.certs/
+*-key.pem
