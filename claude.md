@@ -102,6 +102,19 @@ Document findings in the PR test plan. Fix issues or call out accepted risks.
 git commit -s -m "feat: add example"
 ```
 
+The `-s` flag appends a `Signed-off-by` line from your Git identity (`user.name` and `user.email`). That is the sign-off CI expects: it must match the commit author name and email. Do not hand-write a different email in the trailer.
+
+Before your first commit in this repo, confirm your identity:
+
+```sh
+git config user.name
+git config user.email
+```
+
+If either is wrong, fix it before committing. A sign-off that does not match the author line fails the `DCO sign-off` check.
+
+For multi-commit PRs, sign every commit (`git commit -s`). To fix commits already pushed, add sign-off in new commits or rewrite history only when you intend to force-push.
+
 - Keep PRs small and focused. Open PRs as **draft** by default.
 
 ## Copyright and licensing
