@@ -22,6 +22,15 @@ def test_build_tracking_url_adds_https_when_scheme_missing() -> None:
     assert url == "https://example.com/pricing?utm_source=newsletter"
 
 
+def test_build_tracking_url_rejects_unparseable_url() -> None:
+    with pytest.raises(BulkGenerationError, match="valid URL"):
+        build_tracking_url("http://[", {"utm_source": "newsletter"})
+
+
+def test_url_label_degrades_to_empty_on_unparseable_url() -> None:
+    assert url_label("http://[") == ""
+
+
 def test_build_tracking_url_adds_params_and_preserves_existing_query() -> None:
     url = build_tracking_url(
         "https://example.com/pricing?ref=nav",

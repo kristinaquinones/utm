@@ -338,6 +338,59 @@ def test_bulk_multi_url_naming_uses_url_label(tmp_path) -> None:
     assert names == ["Campaign · pricing", "Campaign · signup"]
 
 
+def test_save_rejects_unparseable_base_url(tmp_path) -> None:
+    main.store = JsonStore(str(tmp_path / "utm-data.json"))
+    client = TestClient(main.app)
+    token = csrf_token(client)
+
+    response = client.post(
+        "/links",
+        data={
+            "csrf_token": token,
+            "generation_mode": "single",
+            "save_mode": "single",
+            "name": "Broken",
+            "base_url": "http://[",
+            "utm_source": "email",
+        },
+        headers={"X-Requested-With": "fetch"},
+    )
+
+    assert response.status_code == 400
+    assert "valid URL" in response.json()["error"]
+    assert main.store.list_links() == []
+
+
+def test_update_link_rejects_unparseable_base_url(tmp_path) -> None:
+    main.store = JsonStore(str(tmp_path / "utm-data.json"))
+    client = TestClient(main.app)
+    token = csrf_token(client)
+
+    created = main.store.create_link(
+        {
+            "name": "Original",
+            "base_url": "https://example.com",
+            "params": {"utm_source": "email"},
+            "generated_url": "https://example.com?utm_source=email",
+        }
+    )
+
+    response = client.post(
+        f"/links/{created['id']}",
+        data={
+            "csrf_token": token,
+            "name": "Original",
+            "base_url": "http://[",
+            "utm_source": "email",
+        },
+    )
+
+    assert response.status_code == 200
+    assert "valid URL" in response.text
+    # The stored link must be untouched after a failed update.
+    assert main.store.get_link(created["id"])["base_url"] == "https://example.com"
+
+
 def test_generate_requires_standard_utm(tmp_path) -> None:
     main.store = JsonStore(str(tmp_path / "utm-data.json"))
     client = TestClient(main.app)

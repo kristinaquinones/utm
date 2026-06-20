@@ -92,12 +92,31 @@ def normalize_base_url(base_url: str) -> str:
     return clean_base
 
 
+def _split_url(clean_url: str):
+    """Split a normalized URL, turning a parse failure into a user-facing error.
+
+    urlsplit raises ValueError on a few malformed authorities (notably an
+    unbalanced IPv6 bracket like "http://["). Callers treat that as invalid
+    user input rather than letting it surface as an unhandled 500.
+    """
+    try:
+        return urlsplit(clean_url)
+    except ValueError as exc:
+        raise BulkGenerationError(
+            f'"{clean_url}" is not a valid URL. '
+            "Remove stray characters or unbalanced brackets, and try again."
+        ) from exc
+
+
 def url_label(base_url: str) -> str:
     clean = normalize_base_url(base_url)
     if not clean:
         return ""
 
-    parts = urlsplit(clean)
+    try:
+        parts = urlsplit(clean)
+    except ValueError:
+        return ""
     path = parts.path.strip("/")
     if path:
         return path.split("/")[-1] or parts.netloc
@@ -110,7 +129,7 @@ def build_tracking_url(base_url: str, params: dict[str, str]) -> str:
     if not clean_base or not clean:
         return clean_base
 
-    parts = urlsplit(clean_base)
+    parts = _split_url(clean_base)
     existing = dict(parse_qsl(parts.query, keep_blank_values=True))
     existing.update(clean)
     query = urlencode(existing, doseq=True)
