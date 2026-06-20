@@ -223,6 +223,7 @@ async def update_link(
 
     try:
         validate_standard_utm_or_raise(params)
+        generated_url = build_tracking_url(base_url, params)
     except BulkGenerationError as exc:
         draft = {
             **link,
@@ -238,7 +239,7 @@ async def update_link(
             "name": name.strip() or "Untitled link",
             "base_url": base_url.strip(),
             "params": params,
-            "generated_url": build_tracking_url(base_url, params),
+            "generated_url": generated_url,
         },
     )
     if not updated:
