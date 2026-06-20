@@ -7,11 +7,12 @@ Thanks for improving UTM builder. Keep changes small, tested, and easy to review
 Run the app with Docker:
 
 ```sh
-./scripts/setup-local-https.sh   # once per machine
+./scripts/setup-local-https.sh     # once per machine: mkcert certs for utm.linkbuilder
+./scripts/setup-reserved-host.sh   # once per machine: reserve utm.linkbuilder on a loopback alias (sudo)
 docker compose up --build
 ```
 
-Open `https://utm.localhost`.
+Open `https://utm.linkbuilder`. See the README's "reserved host and auto-start" section for why the app uses `utm.linkbuilder` on a dedicated loopback alias instead of `utm.localhost`.
 
 For local Python development:
 

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Copyright (C) 2026 Kristina Quinones
+  SPDX-License-Identifier: GPL-2.0-only
+
+  Creates the dedicated loopback alias 127.94.0.1 at boot so Docker can publish
+  utm's ports there without colliding with apps on the default 127.0.0.1.
+  Installed to /Library/LaunchDaemons/ by scripts/setup-reserved-host.sh.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.utm.loopback-alias</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/sbin/ifconfig</string>
+		<string>lo0</string>
+		<string>alias</string>
+		<string>127.94.0.1</string>
+		<string>up</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>KeepAlive</key>
+	<false/>
+	<key>StandardErrorPath</key>
+	<string>/var/log/com.utm.loopback-alias.log</string>
+</dict>
+</plist>

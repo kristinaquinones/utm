@@ -15,4 +15,8 @@ COPY tests ./tests
 
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# --proxy-headers + --forwarded-allow-ips=* so uvicorn trusts Caddy's
+# X-Forwarded-Proto and builds https:// URLs (url_for static assets, redirects).
+# Caddy is the only thing that reaches this container (port 8000 is not published),
+# so trusting all forwarded IPs is safe here.
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips", "*"]

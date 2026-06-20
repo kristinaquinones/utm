@@ -6,8 +6,8 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CERT_DIR="$ROOT_DIR/certs"
-CERT_FILE="$CERT_DIR/utm.localhost.pem"
-KEY_FILE="$CERT_DIR/utm.localhost-key.pem"
+CERT_FILE="$CERT_DIR/utm.linkbuilder.pem"
+KEY_FILE="$CERT_DIR/utm.linkbuilder-key.pem"
 
 if ! command -v mkcert >/dev/null 2>&1; then
   cat >&2 <<'EOF'
@@ -41,8 +41,8 @@ mkdir -p "$CERT_DIR"
 if [[ -f "$CERT_FILE" && -f "$KEY_FILE" ]]; then
   echo "Certificates already exist in ./certs/"
 else
-  echo "Generating certificates for utm.localhost..."
-  mkcert -cert-file "$CERT_FILE" -key-file "$KEY_FILE" utm.localhost
+  echo "Generating certificates for utm.linkbuilder..."
+  mkcert -cert-file "$CERT_FILE" -key-file "$KEY_FILE" utm.linkbuilder
 fi
 
 chmod 600 "$KEY_FILE"
@@ -52,11 +52,14 @@ cat <<EOF
 
 Local HTTPS is ready.
 
-Next step:
+Next step (once per machine): reserve the host and loopback alias:
+  ./scripts/setup-reserved-host.sh
+
+Then start the stack:
   docker compose up --build
 
 Then open:
-  https://utm.localhost
+  https://utm.linkbuilder
 
-http://utm.localhost redirects to HTTPS. No browser certificate warnings after mkcert -install.
+Open the HTTPS URL directly (no http redirect; port 80 is held by other containers). No browser certificate warnings after mkcert -install.
 EOF
