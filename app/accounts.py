@@ -19,6 +19,7 @@ Policy decisions encoded here:
 
 from __future__ import annotations
 
+import time
 import uuid
 from typing import Any
 
@@ -27,7 +28,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.branding import normalize_hex
 from app.db import now_iso
-from app.models import User
+from app.models import AdminAction, User
 from app.repository import normalize_email
 
 
@@ -93,10 +94,14 @@ def set_status(
     status: str,
     approved_by: str | None = None,
 ) -> dict[str, Any] | None:
-    """Approve or deny a user. Never touches ``is_admin`` (no privilege change)."""
+    """Approve or deny a user. Never touches ``is_admin`` (no privilege change).
+
+    Refuses to change an admin's status: admins are managed only by the seed, so
+    one admin can't suspend another (or lock themselves out) through the UI.
+    """
     with session_factory() as db:
         user = db.execute(select(User).where(User.id == user_id)).scalar_one_or_none()
-        if user is None:
+        if user is None or user.is_admin:
             return None
         user.status = status
         user.updated_at = now_iso()
@@ -125,6 +130,41 @@ def update_branding(
         user.updated_at = now_iso()
         db.commit()
         return _user_dict(user)
+
+
+def list_all_users(session_factory: sessionmaker) -> list[dict[str, Any]]:
+    """All users, newest first, for the admin moderation list."""
+    with session_factory() as db:
+        rows = db.execute(select(User).order_by(User.created_at.desc())).scalars().all()
+        return [_user_dict(row) for row in rows]
+
+
+def get_user(session_factory: sessionmaker, user_id: str) -> dict[str, Any] | None:
+    with session_factory() as db:
+        user = db.execute(select(User).where(User.id == user_id)).scalar_one_or_none()
+        return _user_dict(user) if user else None
+
+
+def log_admin_action(
+    session_factory: sessionmaker,
+    admin_id: str,
+    action: str,
+    target_user_id: str,
+    detail: str | None = None,
+) -> None:
+    """Append a moderation action to the audit trail."""
+    with session_factory() as db:
+        db.add(
+            AdminAction(
+                id=uuid.uuid4().hex,
+                admin_id=admin_id,
+                action=action,
+                target_user_id=target_user_id,
+                detail=(detail[:500] if detail else None),
+                created_ts=int(time.time()),
+            )
+        )
+        db.commit()
 
 
 def admin_emails(session_factory: sessionmaker) -> list[str]:

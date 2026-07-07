@@ -1,0 +1,110 @@
+{#
+Copyright (C) 2026 Kristina Quinones
+SPDX-License-Identifier: GPL-2.0-only
+#}
+{% extends "base.html" %}
+{% from "macros.html" import csrf_field %}
+
+{% block title %}Audit {{ target.email }} · UTM link builder{% endblock %}
+
+{% block nav %}{% endblock %}
+
+{% block content %}
+  <div class="main-pad">
+    <div class="admin-wrap">
+      <div class="admin-head">
+        <h2 class="page-heading">Audit: {{ target.email }}</h2>
+        <a href="/admin" class="btn-outline compact">Back to admin</a>
+      </div>
+
+      <div class="card audit-account">
+        <div class="card-section">
+          <p class="section-sub">
+            Status <span class="status-pill status-{{ target.status }}">{{ target.status }}</span>
+            {% if target.is_admin %}<span class="status-pill status-admin">admin</span>{% endif %}
+            &nbsp;·&nbsp; Workspace: {{ target.workspace_name or "—" }}
+          </p>
+          {% if not target.is_admin %}
+          <div class="admin-row-actions">
+            {% if target.status == "approved" %}
+            <form method="post" action="/admin/users/{{ target.id }}/deny">
+              {{ csrf_field(csrf_token) }}
+              <button type="submit" class="btn-outline danger compact">Suspend account</button>
+            </form>
+            {% elif target.status in ("denied", "pending") %}
+            <form method="post" action="/admin/users/{{ target.id }}/approve">
+              {{ csrf_field(csrf_token) }}
+              <button type="submit" class="btn-primary compact">{% if target.status == "denied" %}Reinstate{% else %}Approve{% endif %}</button>
+            </form>
+            {% endif %}
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="admin-head admin-head-section">
+        <h3 class="card-heading-sm">Links ({{ target_links|length }})</h3>
+      </div>
+      {% if target_links %}
+      <div class="admin-table-scroll">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th scope="col">name</th>
+              <th scope="col">destination</th>
+              <th scope="col" class="admin-actions-col">actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for link in target_links %}
+            <tr>
+              <td>{{ link.name }}</td>
+              <td class="audit-url"><a href="{{ link.generated_url }}" rel="noopener noreferrer nofollow" target="_blank">{{ link.generated_url }}</a></td>
+              <td>
+                <form method="post" action="/admin/users/{{ target.id }}/links/{{ link.id }}/delete" onsubmit="return confirm('Delete this link? This cannot be undone.');">
+                  {{ csrf_field(csrf_token) }}
+                  <button type="submit" class="btn-outline danger compact">Delete</button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="empty-state-title">No links.</p>
+      {% endif %}
+
+      <div class="admin-head admin-head-section">
+        <h3 class="card-heading-sm">Templates ({{ target_templates|length }})</h3>
+      </div>
+      {% if target_templates %}
+      <div class="admin-table-scroll">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th scope="col">name</th>
+              <th scope="col" class="admin-actions-col">actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for template in target_templates %}
+            <tr>
+              <td>{{ template.name }}</td>
+              <td>
+                <form method="post" action="/admin/users/{{ target.id }}/templates/{{ template.id }}/delete" onsubmit="return confirm('Delete this template?');">
+                  {{ csrf_field(csrf_token) }}
+                  <button type="submit" class="btn-outline danger compact">Delete</button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="empty-state-title">No templates.</p>
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}
