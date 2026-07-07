@@ -5,8 +5,8 @@ from __future__ import annotations
 
 import csv
 import io
-import os
 import secrets
+from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Any
 
@@ -15,7 +15,9 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Stre
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from app.store import JsonStore
+from app.config import load_settings
+from app.db import Base, make_session_factory
+from app.repository import Store, ensure_user
 from app.utm import (
     BASE_URL_REQUIRED_MSG,
     STANDARD_UTM_KEYS,
@@ -30,12 +32,44 @@ from app.utm import (
     url_label,
 )
 
-app = FastAPI(title="UTM link builder")
+settings = load_settings()
+engine, SessionLocal = make_session_factory(settings)
+
+
+def seed_admin() -> str:
+    """Ensure the configured admins exist; return the first admin's id.
+
+    Phase 0 has no login yet, so a single seeded user stands in as the current
+    tenant. Phase 1 replaces ``get_store``'s body with the session user; the
+    routes already derive their tenant from the dependency, so they won't change.
+    """
+    first_id = ""
+    for index, email in enumerate(settings.seed_admin_emails):
+        user_id = ensure_user(SessionLocal, email, is_admin=True, status="approved")
+        if index == 0:
+            first_id = user_id
+    return first_id
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Postgres schema is managed by Alembic; SQLite dev/CI creates it inline.
+    if settings.is_sqlite:
+        Base.metadata.create_all(engine)
+    app.state.seed_user_id = seed_admin()
+    yield
+
+
+app = FastAPI(title="UTM link builder", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 templates = Jinja2Templates(directory="app/templates")
-store = JsonStore()
 CSRF_TOKEN = secrets.token_urlsafe(32)
+
+
+def get_store() -> Store:
+    """The current tenant's repository. Seed-user bound until Phase 1 auth."""
+    return Store(SessionLocal, app.state.seed_user_id)
 
 
 def require_csrf(csrf_token: str = Form("")) -> None:
@@ -44,14 +78,15 @@ def require_csrf(csrf_token: str = Form("")) -> None:
 
 
 @app.get("/", response_class=HTMLResponse)
-async def index(request: Request) -> HTMLResponse:
-    return render_index(request)
+async def index(request: Request, store: Store = Depends(get_store)) -> HTMLResponse:
+    return render_index(request, store)
 
 
 @app.post("/generate", response_class=HTMLResponse)
 async def generate(
     request: Request,
     _: None = Depends(require_csrf),
+    store: Store = Depends(get_store),
     generation_mode: str = Form("single"),
     name: str = Form(""),
     base_url: str = Form(""),
@@ -84,13 +119,14 @@ async def generate(
     )
     preview, form_error = build_preview(form_state, mode)
     form_state["form_error"] = form_error
-    return render_index(request, form_state=form_state, preview=preview)
+    return render_index(request, store, form_state=form_state, preview=preview)
 
 
 @app.post("/links", response_model=None)
 async def create_links(
     request: Request,
     _: None = Depends(require_csrf),
+    store: Store = Depends(get_store),
     generation_mode: str = Form("single"),
     save_mode: str = Form("single"),
     name: str = Form(""),
@@ -170,6 +206,7 @@ async def create_links(
 async def bulk_delete_links(
     request: Request,
     _: None = Depends(require_csrf),
+    store: Store = Depends(get_store),
     link_ids: list[str] = Form(default=[]),
 ):
     deleted = 0
@@ -184,11 +221,13 @@ async def bulk_delete_links(
 
 
 @app.get("/links/{link_id}/edit", response_class=HTMLResponse)
-async def edit_link(request: Request, link_id: str) -> HTMLResponse:
+async def edit_link(
+    request: Request, link_id: str, store: Store = Depends(get_store)
+) -> HTMLResponse:
     link = store.get_link(link_id)
     if not link:
         raise HTTPException(status_code=404, detail="Link not found")
-    return render_edit_link(request, link)
+    return render_edit_link(request, store, link)
 
 
 @app.post("/links/{link_id}", response_model=None)
@@ -196,6 +235,7 @@ async def update_link(
     request: Request,
     link_id: str,
     _: None = Depends(require_csrf),
+    store: Store = Depends(get_store),
     name: str = Form(""),
     base_url: str = Form(""),
     utm_source: str = Form(""),
@@ -233,7 +273,7 @@ async def update_link(
             "base_url": base_url.strip(),
             "params": params,
         }
-        return render_edit_link(request, draft, error=exc.message)
+        return render_edit_link(request, store, draft, error=exc.message)
 
     updated = store.update_link(
         link_id,
@@ -250,7 +290,11 @@ async def update_link(
 
 
 @app.post("/links/{link_id}/delete")
-async def delete_link(link_id: str, _: None = Depends(require_csrf)) -> RedirectResponse:
+async def delete_link(
+    link_id: str,
+    _: None = Depends(require_csrf),
+    store: Store = Depends(get_store),
+) -> RedirectResponse:
     store.delete_link(link_id)
     return redirect_home()
 
@@ -259,6 +303,7 @@ async def delete_link(link_id: str, _: None = Depends(require_csrf)) -> Redirect
 async def create_template(
     request: Request,
     _: None = Depends(require_csrf),
+    store: Store = Depends(get_store),
     template_name: str = Form(""),
     utm_source: str = Form(""),
     utm_medium: str = Form(""),
@@ -296,13 +341,17 @@ async def create_template(
 
 
 @app.post("/templates/{template_id}/delete")
-async def delete_template(template_id: str, _: None = Depends(require_csrf)) -> RedirectResponse:
+async def delete_template(
+    template_id: str,
+    _: None = Depends(require_csrf),
+    store: Store = Depends(get_store),
+) -> RedirectResponse:
     store.delete_template(template_id)
     return redirect_home()
 
 
 @app.get("/export/links.csv")
-async def export_links() -> StreamingResponse:
+async def export_links(store: Store = Depends(get_store)) -> StreamingResponse:
     links = store.list_links()
     param_keys = sorted({key for link in links for key in link.get("params", {}).keys()})
     param_headers = {key: csv_cell(key) for key in param_keys}
@@ -330,6 +379,7 @@ async def export_links() -> StreamingResponse:
 
 def render_index(
     request: Request,
+    store: Store,
     form_state: dict[str, Any] | None = None,
     preview: list[dict[str, Any]] | None = None,
 ) -> HTMLResponse:
@@ -347,7 +397,7 @@ def render_index(
             "utm_medium_groups": grouped_utm_medium_choices(),
             "form_state": form_state or empty_form_state(),
             "preview": preview or [],
-            "data_path": os.getenv("DATA_PATH", "data/utm-data.json"),
+            "storage_label": settings.storage_label,
             "csrf_token": CSRF_TOKEN,
         },
     )
@@ -374,7 +424,9 @@ def validate_base_url_or_raise(base_url: str) -> None:
         raise BulkGenerationError(BASE_URL_REQUIRED_MSG)
 
 
-def render_edit_link(request: Request, link: dict[str, Any], error: str = "") -> HTMLResponse:
+def render_edit_link(
+    request: Request, store: Store, link: dict[str, Any], error: str = ""
+) -> HTMLResponse:
     return templates.TemplateResponse(
         request,
         "edit_link.html",

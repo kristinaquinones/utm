@@ -12,8 +12,15 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app
 COPY tests ./tests
+COPY alembic.ini .
+COPY alembic ./alembic
+COPY scripts/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 EXPOSE 8000
+
+# The entrypoint runs `alembic upgrade head` before the server starts.
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 
 # --proxy-headers + --forwarded-allow-ips=* so uvicorn trusts Caddy's
 # X-Forwarded-Proto and builds https:// URLs (url_for static assets, redirects).

@@ -18,6 +18,22 @@ jobs:
     name: pytest
     runs-on: ubuntu-latest
     if: github.event.pull_request.draft == false
+    # Postgres is here to exercise the real migration path (JSONB, FKs). The
+    # pytest suite itself runs on throwaway SQLite and needs no service.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: utm
+          POSTGRES_PASSWORD: utm
+          POSTGRES_DB: utm_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U utm -d utm_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -29,6 +45,14 @@ jobs:
 
       - name: Install dependencies
         run: pip install -r requirements.txt
+
+      - name: Verify migrations apply on Postgres
+        env:
+          DATABASE_URL: postgresql+psycopg://utm:utm@localhost:5432/utm_test
+        run: |
+          alembic upgrade head
+          alembic check
+          alembic downgrade base
 
       - name: Run tests
         run: PYTHONPATH=. pytest -q

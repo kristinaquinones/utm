@@ -26,6 +26,29 @@ services:
     expose:
       - "8000"
     environment:
-      DATA_PATH: /data/utm-data.json
+      # psycopg v3 driver. Local dev credentials only; production supplies its
+      # own DATABASE_URL and SESSION_SECRET through the platform secret store.
+      DATABASE_URL: postgresql+psycopg://utm:utm@db:5432/utm
+      ADMIN_EMAILS: admin@localhost
+      SESSION_SECRET: dev-secret-change-me
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: utm
+      POSTGRES_PASSWORD: utm
+      POSTGRES_DB: utm
     volumes:
-      - ./data:/data
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U utm -d utm"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  db-data:
