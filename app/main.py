@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import csv
 import io
-import secrets
 from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Any
@@ -14,10 +13,21 @@ from fastapi import Depends, FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from sqlalchemy import select
+from starlette.middleware.sessions import SessionMiddleware
 
+from app.auth import (
+    ensure_csrf,
+    is_exempt_path,
+    load_session_user,
+    login_user,
+    logout_user,
+    verify_csrf,
+)
 from app.config import load_settings
 from app.db import Base, make_session_factory
-from app.repository import Store, ensure_user
+from app.models import User
+from app.repository import Store, ensure_user, normalize_email
 from app.utm import (
     BASE_URL_REQUIRED_MSG,
     STANDARD_UTM_KEYS,
@@ -64,17 +74,107 @@ app = FastAPI(title="UTM link builder", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 templates = Jinja2Templates(directory="app/templates")
-CSRF_TOKEN = secrets.token_urlsafe(32)
 
 
-def get_store() -> Store:
-    """The current tenant's repository. Seed-user bound until Phase 1 auth."""
-    return Store(SessionLocal, app.state.seed_user_id)
+@app.middleware("http")
+async def auth_gate(request: Request, call_next):
+    """Redirect unauthenticated requests to /login, except for exempt paths.
+
+    Validated once here and stashed on ``request.state.user`` so downstream
+    dependencies reuse it without a second query.
+    """
+    if is_exempt_path(request.url.path):
+        return await call_next(request)
+
+    user = load_session_user(SessionLocal, request, settings.session_absolute_max_age)
+    if user is None:
+        request.session.clear()
+        if request.headers.get("X-Requested-With") == "fetch":
+            return JSONResponse(
+                {"ok": False, "error": "Session expired. Reload the page and sign in."},
+                status_code=401,
+            )
+        return RedirectResponse("/login", status_code=303)
+
+    request.state.user = user
+    return await call_next(request)
 
 
-def require_csrf(csrf_token: str = Form("")) -> None:
-    if not secrets.compare_digest(csrf_token, CSRF_TOKEN):
+# SessionMiddleware is added last so it wraps auth_gate: the session cookie is
+# decoded before the gate reads it, and re-encoded after any gate/route changes.
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=settings.session_secret,
+    session_cookie="utm_session",
+    max_age=settings.session_idle_max_age,
+    same_site="lax",
+    https_only=settings.session_https_only,
+)
+
+
+def require_user(request: Request) -> dict[str, Any]:
+    user = getattr(request.state, "user", None)
+    if user is None:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return user
+
+
+def require_admin(request: Request) -> dict[str, Any]:
+    user = require_user(request)
+    if not user["is_admin"]:
+        raise HTTPException(status_code=403, detail="Admins only")
+    return user
+
+
+def get_store(user: dict[str, Any] = Depends(require_user)) -> Store:
+    """The current tenant's repository, scoped to the authenticated user."""
+    return Store(SessionLocal, user["id"])
+
+
+def require_csrf(request: Request, csrf_token: str = Form("")) -> None:
+    if not verify_csrf(request, csrf_token):
         raise HTTPException(status_code=403, detail="Invalid CSRF token")
+
+
+@app.get("/healthz")
+async def healthz() -> JSONResponse:
+    # App liveness only; database connectivity is added with the deploy in Phase 5.
+    return JSONResponse({"status": "ok"})
+
+
+@app.get("/login", response_class=HTMLResponse)
+async def login_form(request: Request) -> HTMLResponse:
+    return render_login(request)
+
+
+@app.post("/login", response_model=None)
+async def login_submit(
+    request: Request,
+    _: None = Depends(require_csrf),
+    email: str = Form(""),
+):
+    # Temporary passwordless bridge; replaced by magic-link login in Phase 2.
+    if not settings.dev_login_enabled:
+        raise HTTPException(status_code=404, detail="Not found")
+
+    normalized = normalize_email(email)
+    with SessionLocal() as db:
+        user = db.execute(select(User).where(User.email == normalized)).scalar_one_or_none()
+        if user is None or user.status != "approved":
+            return render_login(
+                request,
+                error="No approved account for that email.",
+                status_code=400,
+            )
+        login_user(request, user.id, user.session_epoch)
+
+    return redirect_home()
+
+
+@app.post("/logout", response_model=None)
+async def logout(request: Request, _: None = Depends(require_csrf)) -> RedirectResponse:
+    logout_user(request)
+    return RedirectResponse("/login", status_code=303)
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -398,8 +498,25 @@ def render_index(
             "form_state": form_state or empty_form_state(),
             "preview": preview or [],
             "storage_label": settings.storage_label,
-            "csrf_token": CSRF_TOKEN,
+            "csrf_token": ensure_csrf(request),
+            "current_user": getattr(request.state, "user", None),
         },
+    )
+
+
+def render_login(
+    request: Request, error: str | None = None, status_code: int = 200
+) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request,
+        "login.html",
+        {
+            "csrf_token": ensure_csrf(request),
+            "error": error,
+            "dev_login_enabled": settings.dev_login_enabled,
+            "current_user": None,
+        },
+        status_code=status_code,
     )
 
 
@@ -436,7 +553,8 @@ def render_edit_link(
             "utm_medium_options": UTM_MEDIUM_OPTIONS,
             "utm_medium_groups": grouped_utm_medium_choices(),
             "custom_pairs": custom_pairs(link["params"]),
-            "csrf_token": CSRF_TOKEN,
+            "csrf_token": ensure_csrf(request),
+            "current_user": getattr(request.state, "user", None),
             "links_count": len(store.list_links()),
             "error": error,
         },

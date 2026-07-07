@@ -29,6 +29,18 @@ def _split_emails(raw: str) -> tuple[str, ...]:
     return tuple(seen)
 
 
+def _as_bool(raw: str, default: bool = False) -> bool:
+    if raw == "":
+        return default
+    return raw.strip().lower() in ("1", "true", "yes", "on")
+
+
+# Session lifetimes (seconds). Idle is the rolling cookie max-age; absolute is the
+# hard ceiling regardless of activity.
+DEFAULT_SESSION_IDLE_MAX_AGE = 60 * 60 * 24 * 14   # 14 days
+DEFAULT_SESSION_ABSOLUTE_MAX_AGE = 60 * 60 * 24 * 30  # 30 days
+
+
 @dataclass(frozen=True)
 class Settings:
     database_url: str
@@ -40,6 +52,10 @@ class Settings:
     smtp_port: int
     smtp_user: str
     smtp_password: str
+    session_https_only: bool
+    session_idle_max_age: int
+    session_absolute_max_age: int
+    dev_login_enabled: bool
 
     @property
     def is_sqlite(self) -> bool:
@@ -75,4 +91,16 @@ def load_settings(environ: dict[str, str] | None = None) -> Settings:
         smtp_port=int(env.get("SMTP_PORT", "587") or "587"),
         smtp_user=env.get("SMTP_USER", ""),
         smtp_password=env.get("SMTP_PASSWORD", ""),
+        # Secure cookies require HTTPS; default off so local http dev and the test
+        # client work. Production must set SESSION_HTTPS_ONLY=1 (Phase 5 deploy).
+        session_https_only=_as_bool(env.get("SESSION_HTTPS_ONLY", "")),
+        session_idle_max_age=int(
+            env.get("SESSION_IDLE_MAX_AGE", "") or DEFAULT_SESSION_IDLE_MAX_AGE
+        ),
+        session_absolute_max_age=int(
+            env.get("SESSION_ABSOLUTE_MAX_AGE", "") or DEFAULT_SESSION_ABSOLUTE_MAX_AGE
+        ),
+        # Temporary passwordless "sign in as an approved user" bridge so the app is
+        # usable before magic-link login lands in Phase 2. Disable in production.
+        dev_login_enabled=_as_bool(env.get("DEV_LOGIN", ""), default=True),
     )

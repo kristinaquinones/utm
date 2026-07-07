@@ -11,7 +11,7 @@ magic-link work in Phase 2.
 
 from __future__ import annotations
 
-from sqlalchemy import Boolean, ForeignKey, Index, String
+from sqlalchemy import Boolean, ForeignKey, Index, Integer, String
 from sqlalchemy import JSON
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
@@ -32,6 +32,12 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(320), unique=True, nullable=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
     is_admin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Bumping this invalidates all of the user's existing sessions (a signed cookie
+    # can't be revoked individually, so the session carries the epoch and every
+    # request checks it still matches).
+    session_epoch: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
 
     workspace_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
     accent_color: Mapped[str | None] = mapped_column(String(9), nullable=True)

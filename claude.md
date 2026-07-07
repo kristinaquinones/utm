@@ -70,11 +70,13 @@ Or `./scripts/run-e2e-docker.sh` using the official Playwright image. Default `p
 
 These are non-negotiable. Every change must preserve them.
 
-- **CSRF:** Every mutating route uses `Depends(require_csrf)`. Every form includes the hidden CSRF field from `macros.html`.
+- **CSRF:** Every mutating route uses `Depends(require_csrf)`. Every form includes the hidden CSRF field from `macros.html`. CSRF is **per session** (the token lives in `request.session`, issued to anonymous visitors too), not a process-global secret.
 - **Safe JSON in templates:** Embed data with `{{ data|tojson }}` in `<script type="application/json">` blocks. Never use `|safe` on user content.
 - **CSV formula neutralization:** Use `csv_cell()` in `main.py` for exported values and dynamic headers. Client-side CSV export in `app.js` must apply the same prefix rule for formula characters.
 - **Template escaping:** User strings render through normal Jinja escaping unless explicitly reviewed.
-- **Local tool scope:** No auth layer. Do not add login, sessions, or multi-tenant isolation unless requirements change fundamentally.
+- **Tenant isolation:** Data access goes through a `Store` bound to one `user_id` (`app/repository.py`). Never add an un-scoped query path; every read and write is filtered by the authenticated user. Cross-tenant access must fail closed (404 / no-op).
+- **Auth gate:** Every route except `/login`, `/logout`, `/signup`, `/auth/*`, `/static`, and `/healthz` requires an authenticated, `approved` session (`auth_gate` middleware + `require_user`). Admin routes add `require_admin`.
+- **Scope (dual mode):** This is now a web-deployed, multi-tenant app (see epic #10). The original single-user, no-auth local mode is superseded: local dev runs the authenticated app with a seeded admin (`ADMIN_EMAILS`). Do not remove the auth layer or tenant scoping. Still out of scope unless requirements change again: teams/orgs/roles beyond a single admin flag, billing, and password/OAuth login.
 
 ## UI conventions
 
