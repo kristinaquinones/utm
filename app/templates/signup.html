@@ -1,0 +1,57 @@
+{#
+Copyright (C) 2026 Kristina Quinones
+SPDX-License-Identifier: GPL-2.0-only
+#}
+{% extends "base.html" %}
+{% from "macros.html" import csrf_field %}
+
+{% block title %}Request access · UTM link builder{% endblock %}
+
+{% block nav %}{% endblock %}
+
+{% block content %}
+  <div class="main-pad">
+    <div class="login-wrap">
+      {% if submitted %}
+      <div class="card login-card">
+        <div class="card-section">
+          <h2 class="card-heading">Request received</h2>
+          <p class="section-sub">
+            Thanks. An admin will review your request. If it's approved, you'll be able to
+            sign in with a magic link.
+          </p>
+          <p class="section-sub login-note"><a href="/login">Back to sign in</a></p>
+        </div>
+      </div>
+      {% else %}
+      <form class="card login-card" method="post" action="/signup">
+        {{ csrf_field(csrf_token) }}
+        <div class="card-section">
+          <h2 class="card-heading">Request access</h2>
+          <p class="section-sub">New accounts are approved by an admin before first sign-in.</p>
+
+          {% if error %}
+          <p class="form-error" role="alert">{{ error }}</p>
+          {% endif %}
+
+          <div>
+            <label class="field-label" for="signup-email">email</label>
+            <input id="signup-email" class="f-input" name="email" type="email" autocomplete="email" required autofocus>
+          </div>
+
+          <div>
+            <label class="field-label" for="signup-workspace">workspace name <span class="field-optional">(optional)</span></label>
+            <input id="signup-workspace" class="f-input" name="workspace_name" type="text" maxlength="120" placeholder="e.g. Acme campaigns">
+          </div>
+
+          <button type="submit" class="btn-primary">Request access</button>
+
+          <p class="section-sub login-note">
+            Already approved? <a href="/login">Sign in</a>
+          </p>
+        </div>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}

@@ -36,6 +36,9 @@ SPDX-License-Identifier: GPL-2.0-only
             <h1 class="page-title">UTM link builder</h1>
           </div>
           <div class="app-header-actions">
+            {% if current_user and current_user.is_admin %}
+            <a href="/admin" class="btn-text">Admin</a>
+            {% endif %}
             {% if current_user %}
             <form method="post" action="/logout" class="logout-form">
               {{ csrf_field(csrf_token) }}
