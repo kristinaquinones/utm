@@ -81,6 +81,14 @@ def load_settings(environ: dict[str, str] | None = None) -> Settings:
     # sessions won't survive a restart. Enforcement lands with the session work.
     session_secret = env.get("SESSION_SECRET") or secrets.token_urlsafe(32)
 
+    # The dev-login bridge is a passwordless "sign in as an approved user" shim.
+    # It is OFF by default (secure by default): local dev opts in with DEV_LOGIN=1,
+    # and it can never be enabled in production, so a forgotten flag on deploy
+    # cannot become an auth bypass. Removed entirely once magic-link lands.
+    dev_login_enabled = _as_bool(env.get("DEV_LOGIN", ""), default=False)
+    if dev_login_enabled and env.get("APP_ENV", "").strip().lower() == "production":
+        raise RuntimeError("DEV_LOGIN must not be enabled when APP_ENV=production")
+
     return Settings(
         database_url=database_url,
         session_secret=session_secret,
@@ -100,7 +108,5 @@ def load_settings(environ: dict[str, str] | None = None) -> Settings:
         session_absolute_max_age=int(
             env.get("SESSION_ABSOLUTE_MAX_AGE", "") or DEFAULT_SESSION_ABSOLUTE_MAX_AGE
         ),
-        # Temporary passwordless "sign in as an approved user" bridge so the app is
-        # usable before magic-link login lands in Phase 2. Disable in production.
-        dev_login_enabled=_as_bool(env.get("DEV_LOGIN", ""), default=True),
+        dev_login_enabled=dev_login_enabled,
     )

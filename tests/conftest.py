@@ -12,6 +12,7 @@ fixture then signs in via the dev-login bridge so protected routes are reachable
 from __future__ import annotations
 
 import re
+from dataclasses import replace
 
 import pytest
 from fastapi.testclient import TestClient
@@ -37,8 +38,10 @@ def session_factory(tmp_path) -> sessionmaker:
 @pytest.fixture
 def bound_db(session_factory: sessionmaker, monkeypatch) -> sessionmaker:
     # Point every DB touchpoint in the app (middleware, login, store) at the
-    # test database for the duration of the test.
+    # test database, and enable the dev-login bridge (off by default) so the
+    # client fixture can sign in.
     monkeypatch.setattr(main, "SessionLocal", session_factory)
+    monkeypatch.setattr(main, "settings", replace(main.settings, dev_login_enabled=True))
     return session_factory
 
 
