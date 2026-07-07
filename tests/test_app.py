@@ -5,8 +5,6 @@ import re
 
 from fastapi.testclient import TestClient
 
-import app.main as main
-from app.store import JsonStore
 from app.utm import BASE_URL_REQUIRED_MSG, STANDARD_UTM_REQUIRED_MSG
 
 
@@ -17,9 +15,7 @@ def csrf_token(client: TestClient) -> str:
     return match.group(1)
 
 
-def test_form_workflow_bulk_template_edit_delete_and_export(tmp_path) -> None:
-    main.store = JsonStore(str(tmp_path / "utm-data.json"))
-    client = TestClient(main.app)
+def test_form_workflow_bulk_template_edit_delete_and_export(client, store) -> None:
     token = csrf_token(client)
 
     response = client.get("/")
@@ -60,8 +56,8 @@ def test_form_workflow_bulk_template_edit_delete_and_export(tmp_path) -> None:
         follow_redirects=False,
     )
     assert saved.status_code == 303
-    assert len(main.store.list_links()) == 2
-    names = [link["name"] for link in main.store.list_links()]
+    assert len(store.list_links()) == 2
+    names = [link["name"] for link in store.list_links()]
     assert names == ["Launch · alpha", "Launch · beta"]
 
     template = client.post(
@@ -70,17 +66,17 @@ def test_form_workflow_bulk_template_edit_delete_and_export(tmp_path) -> None:
         follow_redirects=False,
     )
     assert template.status_code == 303
-    assert main.store.list_templates()[0]["name"] == "Email baseline"
+    assert store.list_templates()[0]["name"] == "Email baseline"
 
-    first_link = main.store.list_links()[0]
+    first_link = store.list_links()[0]
     edited = client.post(
         f"/links/{first_link['id']}",
         data={**form_data, "name": "Launch edited", "utm_campaign": "gamma"},
         follow_redirects=False,
     )
     assert edited.status_code == 303
-    assert main.store.get_link(first_link["id"])["name"] == "Launch edited"
-    assert "utm_campaign=gamma" in main.store.get_link(first_link["id"])["generated_url"]
+    assert store.get_link(first_link["id"])["name"] == "Launch edited"
+    assert "utm_campaign=gamma" in store.get_link(first_link["id"])["generated_url"]
 
     export = client.get("/export/links.csv")
     assert export.status_code == 200
@@ -100,12 +96,10 @@ def test_form_workflow_bulk_template_edit_delete_and_export(tmp_path) -> None:
         follow_redirects=False,
     )
     assert deleted.status_code == 303
-    assert main.store.get_link(first_link["id"]) is None
+    assert store.get_link(first_link["id"]) is None
 
 
-def test_get_edit_link_page(tmp_path) -> None:
-    main.store = JsonStore(str(tmp_path / "utm-data.json"))
-    client = TestClient(main.app)
+def test_get_edit_link_page(client, store) -> None:
     token = csrf_token(client)
 
     saved = client.post(
@@ -121,7 +115,7 @@ def test_get_edit_link_page(tmp_path) -> None:
         follow_redirects=False,
     )
     assert saved.status_code == 303
-    link = main.store.list_links()[0]
+    link = store.list_links()[0]
 
     response = client.get(f"/links/{link['id']}/edit")
 
@@ -130,18 +124,13 @@ def test_get_edit_link_page(tmp_path) -> None:
     assert 'name="base_url"' in response.text
 
 
-def test_mutating_routes_reject_missing_csrf_token(tmp_path) -> None:
-    main.store = JsonStore(str(tmp_path / "utm-data.json"))
-    client = TestClient(main.app)
-
+def test_mutating_routes_reject_missing_csrf_token(client) -> None:
     response = client.post("/links", data={"base_url": "https://example.com"})
 
     assert response.status_code == 403
 
 
-def test_template_json_escapes_script_breakouts(tmp_path) -> None:
-    main.store = JsonStore(str(tmp_path / "utm-data.json"))
-    client = TestClient(main.app)
+def test_template_json_escapes_script_breakouts(client) -> None:
     token = csrf_token(client)
 
     client.post(
@@ -159,10 +148,8 @@ def test_template_json_escapes_script_breakouts(tmp_path) -> None:
     assert "\\u003c/script\\u003e" in response.text
 
 
-def test_csv_export_neutralizes_formula_values(tmp_path) -> None:
-    main.store = JsonStore(str(tmp_path / "utm-data.json"))
-    client = TestClient(main.app)
-    main.store.create_link(
+def test_csv_export_neutralizes_formula_values(client, store) -> None:
+    store.create_link(
         {
             "name": "=IMPORTDATA(\"https://example.com\")",
             "base_url": "https://example.com",
@@ -186,12 +173,10 @@ def test_template_custom_utm_keys_are_not_dropped_by_prefix_filter() -> None:
     assert "!standardKeys.has(key)" in script
 
 
-def test_bulk_delete_links(tmp_path) -> None:
-    main.store = JsonStore(str(tmp_path / "utm-data.json"))
-    client = TestClient(main.app)
+def test_bulk_delete_links(client, store) -> None:
     token = csrf_token(client)
 
-    first = main.store.create_link(
+    first = store.create_link(
         {
             "name": "One",
             "base_url": "https://example.com",
@@ -199,7 +184,7 @@ def test_bulk_delete_links(tmp_path) -> None:
             "generated_url": "https://example.com?utm_source=a",
         }
     )
-    second = main.store.create_link(
+    second = store.create_link(
         {
             "name": "Two",
             "base_url": "https://example.com",
@@ -216,12 +201,10 @@ def test_bulk_delete_links(tmp_path) -> None:
 
     assert response.status_code == 200
     assert response.json() == {"ok": True, "deleted": 2}
-    assert main.store.list_links() == []
+    assert store.list_links() == []
 
 
-def test_fetch_save_links_returns_json(tmp_path) -> None:
-    main.store = JsonStore(str(tmp_path / "utm-data.json"))
-    client = TestClient(main.app)
+def test_fetch_save_links_returns_json(client) -> None:
     token = csrf_token(client)
 
     response = client.post(
@@ -243,9 +226,7 @@ def test_fetch_save_links_returns_json(tmp_path) -> None:
     assert payload["names"] == ["Newsletter"]
 
 
-def test_single_mode_ignores_bulk_fields_on_generate(tmp_path) -> None:
-    main.store = JsonStore(str(tmp_path / "utm-data.json"))
-    client = TestClient(main.app)
+def test_single_mode_ignores_bulk_fields_on_generate(client) -> None:
     token = csrf_token(client)
 
     response = client.post(
@@ -266,9 +247,7 @@ def test_single_mode_ignores_bulk_fields_on_generate(tmp_path) -> None:
     assert "utm_campaign=alpha" not in response.text
 
 
-def test_bulk_generate_reports_mismatched_counts(tmp_path) -> None:
-    main.store = JsonStore(str(tmp_path / "utm-data.json"))
-    client = TestClient(main.app)
+def test_bulk_generate_reports_mismatched_counts(client) -> None:
     token = csrf_token(client)
 
     response = client.post(
@@ -288,11 +267,9 @@ def test_bulk_generate_reports_mismatched_counts(tmp_path) -> None:
     assert "URL count and value count must match" in response.text
 
 
-def test_bulk_save_rejects_over_limit(tmp_path) -> None:
+def test_bulk_save_rejects_over_limit(client, store) -> None:
     from app.utm import MAX_BULK_LINKS
 
-    main.store = JsonStore(str(tmp_path / "utm-data.json"))
-    client = TestClient(main.app)
     token = csrf_token(client)
     values = "\n".join(f"value-{index}" for index in range(MAX_BULK_LINKS + 1))
 
@@ -315,9 +292,7 @@ def test_bulk_save_rejects_over_limit(tmp_path) -> None:
     assert response.json()["error"] == f"Maximum {MAX_BULK_LINKS} links allowed."
 
 
-def test_bulk_multi_url_naming_uses_url_label(tmp_path) -> None:
-    main.store = JsonStore(str(tmp_path / "utm-data.json"))
-    client = TestClient(main.app)
+def test_bulk_multi_url_naming_uses_url_label(client, store) -> None:
     token = csrf_token(client)
 
     response = client.post(
@@ -334,13 +309,11 @@ def test_bulk_multi_url_naming_uses_url_label(tmp_path) -> None:
     )
 
     assert response.status_code == 200
-    names = [link["name"] for link in main.store.list_links()]
+    names = [link["name"] for link in store.list_links()]
     assert names == ["Campaign · pricing", "Campaign · signup"]
 
 
-def test_save_rejects_unparseable_base_url(tmp_path) -> None:
-    main.store = JsonStore(str(tmp_path / "utm-data.json"))
-    client = TestClient(main.app)
+def test_save_rejects_unparseable_base_url(client, store) -> None:
     token = csrf_token(client)
 
     response = client.post(
@@ -358,15 +331,13 @@ def test_save_rejects_unparseable_base_url(tmp_path) -> None:
 
     assert response.status_code == 400
     assert "valid URL" in response.json()["error"]
-    assert main.store.list_links() == []
+    assert store.list_links() == []
 
 
-def test_update_link_rejects_unparseable_base_url(tmp_path) -> None:
-    main.store = JsonStore(str(tmp_path / "utm-data.json"))
-    client = TestClient(main.app)
+def test_update_link_rejects_unparseable_base_url(client, store) -> None:
     token = csrf_token(client)
 
-    created = main.store.create_link(
+    created = store.create_link(
         {
             "name": "Original",
             "base_url": "https://example.com",
@@ -388,12 +359,10 @@ def test_update_link_rejects_unparseable_base_url(tmp_path) -> None:
     assert response.status_code == 200
     assert "valid URL" in response.text
     # The stored link must be untouched after a failed update.
-    assert main.store.get_link(created["id"])["base_url"] == "https://example.com"
+    assert store.get_link(created["id"])["base_url"] == "https://example.com"
 
 
-def test_save_rejects_missing_base_url(tmp_path) -> None:
-    main.store = JsonStore(str(tmp_path / "utm-data.json"))
-    client = TestClient(main.app)
+def test_save_rejects_missing_base_url(client, store) -> None:
     token = csrf_token(client)
 
     response = client.post(
@@ -411,12 +380,10 @@ def test_save_rejects_missing_base_url(tmp_path) -> None:
 
     assert response.status_code == 400
     assert response.json()["error"] == BASE_URL_REQUIRED_MSG
-    assert main.store.list_links() == []
+    assert store.list_links() == []
 
 
-def test_bulk_save_rejects_missing_base_urls(tmp_path) -> None:
-    main.store = JsonStore(str(tmp_path / "utm-data.json"))
-    client = TestClient(main.app)
+def test_bulk_save_rejects_missing_base_urls(client, store) -> None:
     token = csrf_token(client)
 
     response = client.post(
@@ -434,12 +401,10 @@ def test_bulk_save_rejects_missing_base_urls(tmp_path) -> None:
 
     assert response.status_code == 400
     assert response.json()["error"] == BASE_URL_REQUIRED_MSG
-    assert main.store.list_links() == []
+    assert store.list_links() == []
 
 
-def test_generate_preview_requires_base_url(tmp_path) -> None:
-    main.store = JsonStore(str(tmp_path / "utm-data.json"))
-    client = TestClient(main.app)
+def test_generate_preview_requires_base_url(client) -> None:
     token = csrf_token(client)
 
     response = client.post(
@@ -457,12 +422,10 @@ def test_generate_preview_requires_base_url(tmp_path) -> None:
     assert "preview-section" not in response.text
 
 
-def test_update_link_rejects_missing_base_url(tmp_path) -> None:
-    main.store = JsonStore(str(tmp_path / "utm-data.json"))
-    client = TestClient(main.app)
+def test_update_link_rejects_missing_base_url(client, store) -> None:
     token = csrf_token(client)
 
-    created = main.store.create_link(
+    created = store.create_link(
         {
             "name": "Original",
             "base_url": "https://example.com",
@@ -484,12 +447,10 @@ def test_update_link_rejects_missing_base_url(tmp_path) -> None:
     assert response.status_code == 200
     assert BASE_URL_REQUIRED_MSG in response.text
     # The stored link must be untouched after a failed update.
-    assert main.store.get_link(created["id"])["base_url"] == "https://example.com"
+    assert store.get_link(created["id"])["base_url"] == "https://example.com"
 
 
-def test_generate_requires_standard_utm(tmp_path) -> None:
-    main.store = JsonStore(str(tmp_path / "utm-data.json"))
-    client = TestClient(main.app)
+def test_generate_requires_standard_utm(client) -> None:
     token = csrf_token(client)
 
     response = client.post(
@@ -506,9 +467,7 @@ def test_generate_requires_standard_utm(tmp_path) -> None:
     assert "preview-section" not in response.text
 
 
-def test_save_rejects_custom_param_without_standard_utm(tmp_path) -> None:
-    main.store = JsonStore(str(tmp_path / "utm-data.json"))
-    client = TestClient(main.app)
+def test_save_rejects_custom_param_without_standard_utm(client) -> None:
     token = csrf_token(client)
 
     response = client.post(
@@ -528,9 +487,7 @@ def test_save_rejects_custom_param_without_standard_utm(tmp_path) -> None:
     assert response.json()["error"] == STANDARD_UTM_REQUIRED_MSG
 
 
-def test_bulk_vary_standard_utm_without_base_fields(tmp_path) -> None:
-    main.store = JsonStore(str(tmp_path / "utm-data.json"))
-    client = TestClient(main.app)
+def test_bulk_vary_standard_utm_without_base_fields(client) -> None:
     token = csrf_token(client)
 
     response = client.post(
@@ -549,9 +506,7 @@ def test_bulk_vary_standard_utm_without_base_fields(tmp_path) -> None:
     assert STANDARD_UTM_REQUIRED_MSG not in response.text
 
 
-def test_bulk_vary_custom_key_without_standard_utm_fails(tmp_path) -> None:
-    main.store = JsonStore(str(tmp_path / "utm-data.json"))
-    client = TestClient(main.app)
+def test_bulk_vary_custom_key_without_standard_utm_fails(client) -> None:
     token = csrf_token(client)
 
     response = client.post(
@@ -571,9 +526,7 @@ def test_bulk_vary_custom_key_without_standard_utm_fails(tmp_path) -> None:
     assert STANDARD_UTM_REQUIRED_MSG in response.text
 
 
-def test_template_save_requires_standard_utm(tmp_path) -> None:
-    main.store = JsonStore(str(tmp_path / "utm-data.json"))
-    client = TestClient(main.app)
+def test_template_save_requires_standard_utm(client) -> None:
     token = csrf_token(client)
 
     response = client.post(
@@ -591,9 +544,7 @@ def test_template_save_requires_standard_utm(tmp_path) -> None:
     assert response.json()["error"] == STANDARD_UTM_REQUIRED_MSG
 
 
-def test_delete_template(tmp_path) -> None:
-    main.store = JsonStore(str(tmp_path / "utm-data.json"))
-    client = TestClient(main.app)
+def test_delete_template(client, store) -> None:
     token = csrf_token(client)
 
     created = client.post(
@@ -608,7 +559,7 @@ def test_delete_template(tmp_path) -> None:
         follow_redirects=False,
     )
     assert created.status_code == 303
-    template = main.store.list_templates()[0]
+    template = store.list_templates()[0]
 
     deleted = client.post(f"/templates/{template['id']}/delete", follow_redirects=False)
     assert deleted.status_code == 403
@@ -619,4 +570,4 @@ def test_delete_template(tmp_path) -> None:
         follow_redirects=False,
     )
     assert deleted.status_code == 303
-    assert main.store.list_templates() == []
+    assert store.list_templates() == []
