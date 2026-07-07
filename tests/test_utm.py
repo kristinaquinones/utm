@@ -4,6 +4,7 @@
 import pytest
 
 from app.utm import (
+    BASE_URL_REQUIRED_MSG,
     MAX_BULK_LINKS,
     STANDARD_UTM_REQUIRED_MSG,
     BulkGenerationError,
@@ -108,6 +109,16 @@ def test_generate_links_enforces_max_bulk_links() -> None:
     values = "\n".join(f"value-{index}" for index in range(MAX_BULK_LINKS + 1))
     with pytest.raises(BulkGenerationError, match=str(MAX_BULK_LINKS)):
         generate_links(["https://example.com"], {"utm_source": "email"}, "utm_campaign", values)
+
+
+def test_generate_links_rejects_missing_base_url() -> None:
+    with pytest.raises(BulkGenerationError, match=BASE_URL_REQUIRED_MSG):
+        generate_links([""], {"utm_source": "email"})
+
+
+def test_generate_links_rejects_blank_base_urls_in_bulk() -> None:
+    with pytest.raises(BulkGenerationError, match=BASE_URL_REQUIRED_MSG):
+        generate_links(["", "   "], {"utm_source": "email"})
 
 
 def test_url_label_uses_last_path_segment() -> None:

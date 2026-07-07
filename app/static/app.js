@@ -350,8 +350,20 @@ const hasStandardUtm = () => {
   return STANDARD_UTM_KEYS.includes(bulkKey) && countLines(bulkValues) > 0;
 };
 
+const hasBaseUrl = () => {
+  const mode = window.getGenerationMode?.() || "single";
+  if (mode !== "bulk") {
+    return Boolean(document.getElementById("utm-base-url")?.value.trim());
+  }
+  const bulkUrls = document.getElementById("f-bulk-base-urls")?.value || "";
+  const fallback = document.getElementById("bulk-fallback-url")?.value.trim() || "";
+  return countLines(bulkUrls) > 0 || Boolean(fallback);
+};
+
 const updateFormValidity = () => {
   const validUtm = hasStandardUtm();
+  const validUrl = hasBaseUrl();
+  const valid = validUtm && validUrl;
   const generateBtn = document.getElementById("generate-preview-btn");
   const saveSingle = document.getElementById("save-single");
   const saveBulk = document.getElementById("save-bulk");
@@ -362,15 +374,20 @@ const updateFormValidity = () => {
   const valuesCount = valuesField ? countLines(valuesField.value) : 0;
   const overLimit = urlCount > MAX_BULK_LINKS || valuesCount > MAX_BULK_LINKS;
 
-  setFieldDisabled(generateBtn, !validUtm || overLimit);
-  setFieldDisabled(saveSingle, !validUtm);
-  setFieldDisabled(saveBulk, !validUtm || overLimit);
+  setFieldDisabled(generateBtn, !valid || overLimit);
+  setFieldDisabled(saveSingle, !valid);
+  setFieldDisabled(saveBulk, !valid || overLimit);
 
   if (hint) {
-    hint.textContent = validUtm
-      ? ""
-      : "Add at least one standard UTM parameter (utm_source, utm_medium, utm_campaign, utm_term, or utm_content).";
-    hint.classList.toggle("hidden", validUtm);
+    let message = "";
+    if (!validUtm) {
+      message =
+        "Add at least one standard UTM parameter (utm_source, utm_medium, utm_campaign, utm_term, or utm_content).";
+    } else if (!validUrl) {
+      message = "Add a destination URL.";
+    }
+    hint.textContent = message;
+    hint.classList.toggle("hidden", !message);
   }
 };
 
@@ -506,6 +523,8 @@ const initModeToggle = () => {
   singleBtn.addEventListener("click", () => setMode("single"));
   bulkBtn.addEventListener("click", () => setMode("bulk"));
 
+  baseUrlInput?.addEventListener("input", updateFormValidity);
+  document.getElementById("bulk-fallback-url")?.addEventListener("input", updateFormValidity);
   bulkBaseUrls?.addEventListener("input", updateBulkLineCounts);
   bulkValues?.addEventListener("input", updateBulkLineCounts);
   bulkKey?.addEventListener("change", updateFormValidity);
