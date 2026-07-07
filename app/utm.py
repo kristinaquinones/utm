@@ -51,6 +51,8 @@ STANDARD_UTM_REQUIRED_MSG = (
     "(utm_source, utm_medium, utm_campaign, utm_term, or utm_content)."
 )
 
+BASE_URL_REQUIRED_MSG = "Add a destination URL."
+
 
 class BulkGenerationError(Exception):
     def __init__(self, message: str) -> None:
@@ -194,7 +196,7 @@ def generate_links(
 
     urls = [url.strip() for url in base_urls if url.strip()]
     if not urls:
-        urls = [""]
+        raise BulkGenerationError(BASE_URL_REQUIRED_MSG)
 
     has_vary = bool(clean_bulk_key and values)
 

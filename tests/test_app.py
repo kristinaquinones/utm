@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 
 import app.main as main
 from app.store import JsonStore
-from app.utm import STANDARD_UTM_REQUIRED_MSG
+from app.utm import BASE_URL_REQUIRED_MSG, STANDARD_UTM_REQUIRED_MSG
 
 
 def csrf_token(client: TestClient) -> str:
@@ -387,6 +387,102 @@ def test_update_link_rejects_unparseable_base_url(tmp_path) -> None:
 
     assert response.status_code == 200
     assert "valid URL" in response.text
+    # The stored link must be untouched after a failed update.
+    assert main.store.get_link(created["id"])["base_url"] == "https://example.com"
+
+
+def test_save_rejects_missing_base_url(tmp_path) -> None:
+    main.store = JsonStore(str(tmp_path / "utm-data.json"))
+    client = TestClient(main.app)
+    token = csrf_token(client)
+
+    response = client.post(
+        "/links",
+        data={
+            "csrf_token": token,
+            "generation_mode": "single",
+            "save_mode": "single",
+            "name": "No URL",
+            "base_url": "",
+            "utm_source": "tumblr",
+        },
+        headers={"X-Requested-With": "fetch"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["error"] == BASE_URL_REQUIRED_MSG
+    assert main.store.list_links() == []
+
+
+def test_bulk_save_rejects_missing_base_urls(tmp_path) -> None:
+    main.store = JsonStore(str(tmp_path / "utm-data.json"))
+    client = TestClient(main.app)
+    token = csrf_token(client)
+
+    response = client.post(
+        "/links",
+        data={
+            "csrf_token": token,
+            "generation_mode": "bulk",
+            "save_mode": "bulk",
+            "name": "No URLs",
+            "bulk_base_urls": "",
+            "utm_source": "tumblr",
+        },
+        headers={"X-Requested-With": "fetch"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["error"] == BASE_URL_REQUIRED_MSG
+    assert main.store.list_links() == []
+
+
+def test_generate_preview_requires_base_url(tmp_path) -> None:
+    main.store = JsonStore(str(tmp_path / "utm-data.json"))
+    client = TestClient(main.app)
+    token = csrf_token(client)
+
+    response = client.post(
+        "/generate",
+        data={
+            "csrf_token": token,
+            "generation_mode": "single",
+            "base_url": "",
+            "utm_source": "tumblr",
+        },
+    )
+
+    assert response.status_code == 200
+    assert BASE_URL_REQUIRED_MSG in response.text
+    assert "preview-section" not in response.text
+
+
+def test_update_link_rejects_missing_base_url(tmp_path) -> None:
+    main.store = JsonStore(str(tmp_path / "utm-data.json"))
+    client = TestClient(main.app)
+    token = csrf_token(client)
+
+    created = main.store.create_link(
+        {
+            "name": "Original",
+            "base_url": "https://example.com",
+            "params": {"utm_source": "email"},
+            "generated_url": "https://example.com?utm_source=email",
+        }
+    )
+
+    response = client.post(
+        f"/links/{created['id']}",
+        data={
+            "csrf_token": token,
+            "name": "Original",
+            "base_url": "",
+            "utm_source": "email",
+        },
+    )
+
+    assert response.status_code == 200
+    assert BASE_URL_REQUIRED_MSG in response.text
     # The stored link must be untouched after a failed update.
     assert main.store.get_link(created["id"])["base_url"] == "https://example.com"
 

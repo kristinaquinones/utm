@@ -17,6 +17,7 @@ from fastapi.templating import Jinja2Templates
 
 from app.store import JsonStore
 from app.utm import (
+    BASE_URL_REQUIRED_MSG,
     STANDARD_UTM_KEYS,
     UTM_MEDIUM_OPTIONS,
     grouped_utm_medium_choices,
@@ -223,6 +224,7 @@ async def update_link(
 
     try:
         validate_standard_utm_or_raise(params)
+        validate_base_url_or_raise(base_url)
         generated_url = build_tracking_url(base_url, params)
     except BulkGenerationError as exc:
         draft = {
@@ -365,6 +367,11 @@ def validate_standard_utm_or_raise(
     error = standard_utm_error(params, bulk_key, bulk_values, bulk_mode=bulk_mode)
     if error:
         raise BulkGenerationError(error)
+
+
+def validate_base_url_or_raise(base_url: str) -> None:
+    if not base_url.strip():
+        raise BulkGenerationError(BASE_URL_REQUIRED_MSG)
 
 
 def render_edit_link(request: Request, link: dict[str, Any], error: str = "") -> HTMLResponse:
