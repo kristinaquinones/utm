@@ -1,0 +1,43 @@
+# Fly.io deployment config for the UTM link builder.
+# See the README "Deploy to Fly.io" section for the full setup, including
+# `fly secrets` (SESSION_SECRET, DATABASE_URL, POSTMARK_TOKEN) and Postgres.
+#
+# Rename `app` to your own Fly app before `fly deploy`.
+
+app = "utm-link-builder"
+primary_region = "iad"
+
+[build]
+  # Uses the repository Dockerfile.
+
+[deploy]
+  # Migrations run once per deploy in a temporary release machine, so app
+  # machines start with RUN_MIGRATIONS_ON_START=0 (see [env]) and never race.
+  release_command = "alembic upgrade head"
+
+[env]
+  APP_ENV = "production"
+  SESSION_HTTPS_ONLY = "1"
+  RUN_MIGRATIONS_ON_START = "0"
+  # Must match the app's public URL so magic-link emails point at the right host.
+  BASE_URL = "https://utm-link-builder.fly.dev"
+  # Set the first admin's email (non-secret). Change before first deploy:
+  # ADMIN_EMAILS = "you@example.com"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [[http_service.checks]]
+    method = "GET"
+    path = "/healthz"
+    interval = "15s"
+    timeout = "2s"
+    grace_period = "10s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
