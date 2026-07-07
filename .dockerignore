@@ -1,6 +1,20 @@
+# Keep the build context (and image) lean and free of local-only artifacts.
+.git
+.github
 .venv
 __pycache__
+**/__pycache__
+*.pyc
 .pytest_cache
 .mypy_cache
+.ruff_cache
+
+# Local data, certs, and design handoffs must never ship in the image.
 data
-*.pyc
+certs
+d
+*.db
+
+# Browser E2E suite is local-only (not run in the container).
+tests/e2e
+requirements-e2e.txt

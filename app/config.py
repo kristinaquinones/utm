@@ -35,6 +35,19 @@ def _as_bool(raw: str, default: bool = False) -> bool:
     return raw.strip().lower() in ("1", "true", "yes", "on")
 
 
+def normalize_database_url(url: str) -> str:
+    """Force the psycopg (v3) driver on Postgres URLs.
+
+    Managed providers (Fly, Heroku, ...) hand out ``postgres://`` or
+    ``postgresql://``; SQLAlchemy needs the explicit ``postgresql+psycopg://``
+    driver, so rewrite the scheme rather than making operators remember to.
+    """
+    for prefix in ("postgresql+psycopg://", "postgresql://", "postgres://"):
+        if url.startswith(prefix):
+            return "postgresql+psycopg://" + url[len(prefix):]
+    return url
+
+
 # Session lifetimes (seconds). Idle is the rolling cookie max-age; absolute is the
 # hard ceiling regardless of activity.
 DEFAULT_SESSION_IDLE_MAX_AGE = 60 * 60 * 24 * 14   # 14 days
@@ -91,7 +104,7 @@ class Settings:
 
 def load_settings(environ: dict[str, str] | None = None) -> Settings:
     env = environ if environ is not None else os.environ
-    database_url = env.get("DATABASE_URL", DEFAULT_DATABASE_URL)
+    database_url = normalize_database_url(env.get("DATABASE_URL", DEFAULT_DATABASE_URL))
 
     # SESSION_SECRET is not consumed until Phase 1 (sessions). In dev we mint an
     # ephemeral one so nothing crashes; production must set a stable value or

@@ -13,7 +13,7 @@ from fastapi import Depends, FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import select
+from sqlalchemy import select, text
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.auth import (
@@ -154,8 +154,13 @@ def require_csrf(request: Request, csrf_token: str = Form("")) -> None:
 
 @app.get("/healthz")
 async def healthz() -> JSONResponse:
-    # App liveness only; database connectivity is added with the deploy in Phase 5.
-    return JSONResponse({"status": "ok"})
+    # Liveness + database connectivity, for the platform's health checks.
+    try:
+        with SessionLocal() as db:
+            db.execute(text("SELECT 1"))
+    except Exception:
+        return JSONResponse({"status": "degraded", "database": "unreachable"}, status_code=503)
+    return JSONResponse({"status": "ok", "database": "ok"})
 
 
 @app.get("/login", response_class=HTMLResponse)

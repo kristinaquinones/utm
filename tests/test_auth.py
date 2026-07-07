@@ -39,7 +39,7 @@ def test_login_page_is_reachable_anonymously(anon_client) -> None:
 def test_healthz_is_public(anon_client) -> None:
     response = anon_client.get("/healthz")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+    assert response.json()["status"] == "ok"
 
 
 def test_gate_returns_401_json_for_fetch_requests(anon_client) -> None:

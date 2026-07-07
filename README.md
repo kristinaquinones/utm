@@ -37,7 +37,16 @@ Open **`https://utm.linkbuilder`** (HTTPS, not HTTP). There is no `http://` redi
 
 If you skip the setup script, Caddy will refuse to start and print the same instructions.
 
-Data is stored in `./data/utm-data.json`.
+Data is stored in Postgres (the `db` service in `docker-compose.yml`), in the `db-data` volume.
+
+**Signing in locally.** The app now has accounts and magic-link login. `docker-compose.yml` seeds an admin (`ADMIN_EMAILS=admin@localhost`) and uses the console email backend, so the sign-in link is printed to the logs. To sign in:
+
+```sh
+# open https://utm.linkbuilder, enter admin@localhost, then grab the link:
+docker compose logs -f utm | grep auth/callback
+```
+
+Paste that link into the browser. Other people request access at `/signup`; an admin approves them at `/admin`.
 
 ## reserved host and auto-start
 
@@ -82,21 +91,22 @@ If no links are saved yet, the export will still download a CSV with only the he
 
 ## security model
 
-This is a local, single-user tool. It has no login screen and is intended to run on your own machine.
+The app is multi-tenant with passwordless authentication. Each approved user gets a private workspace; no user can see another's links, templates, or branding.
 
-The app still includes a few practical safeguards:
+- **Magic-link login.** No passwords. Requesting a link always responds "check your email" regardless of whether the account exists or is approved, to resist account enumeration; tokens are hashed at rest, single-use, and short-lived.
+- **Approval-gated signup.** New signups are `pending` until an admin approves them at `/admin`. The first admin is seeded from `ADMIN_EMAILS`; admin rights are granted only by that seed, never through the UI.
+- **Tenant isolation.** Every data query is scoped to the authenticated user (`app/repository.py`); there is no un-scoped read or write path.
+- **Sessions** are signed (not encrypted) cookies holding only an id, an epoch, and a CSRF token; `HttpOnly`, `SameSite=Lax`, and `Secure` in production. Bumping a user's session epoch revokes their sessions.
+- **CSRF** is per-session (issued to anonymous visitors too, so login/signup are protected) on every mutating route.
+- Plus: safe JSON embedding, CSV formula neutralization, per-tenant accent colors sanitized to a parsed hex before reaching any `<style>` block, and rate limiting on `/auth/request-link` and `/signup`.
 
-- CSRF protection for every mutating form post.
-- Safe JSON embedding for template data.
-- CSV formula neutralization for exported values and dynamic headers.
-- Local data excluded from Git through `.gitignore`.
-- Local HTTPS uses [mkcert](https://github.com/FiloSottile/mkcert); `./scripts/setup-local-https.sh` installs a machine-local root CA trusted only on that computer. Certificate files live in `./certs/` and are gitignored.
+Local HTTPS uses [mkcert](https://github.com/FiloSottile/mkcert); `./scripts/setup-local-https.sh` installs a machine-local root CA. Certificate files live in `./certs/` and are gitignored.
 
 ## local data
 
-Saved links and templates live in `./data/utm-data.json`.
+Data lives in Postgres. Docker Compose runs a `db` service and stores it in the `db-data` volume; reset with `docker compose down -v`.
 
-That file is intentionally ignored by Git. Delete it if you want to reset the app.
+For the plain-Python path (`uvicorn --reload`), `DATABASE_URL` defaults to a local SQLite file at `./data/utm.db` (gitignored) so you can run without standing up Postgres. Schema for SQLite is created automatically; for Postgres, run `alembic upgrade head`.
 
 ## development
 
@@ -136,6 +146,65 @@ Run E2E when you change routes, templates, `app.js`, export behavior, or saved-l
 Caddy listens on the dedicated loopback alias `127.94.0.1:443` and proxies to the app on port `8000`. TLS certificates come from [mkcert](https://github.com/FiloSottile/mkcert) in `./certs/` (gitignored). Generate them with `./scripts/setup-local-https.sh` before the first run.
 
 If another container already publishes `0.0.0.0:443` (the one port this app needs), change the `127.94.0.1:443:443` mapping in `docker-compose.yml` to a free port, for example `127.94.0.1:8443:443`, and open `https://utm.linkbuilder:8443`. See [gotchas](#gotchas).
+
+## Deploy to Fly.io
+
+The hosted target is [Fly.io](https://fly.io): it runs the repo's Dockerfile directly and offers managed Postgres, so a Dockerized FastAPI app deploys with almost no glue. `fly.toml` is included and configured; change the `app` name and `BASE_URL` first.
+
+### One-time setup
+
+```sh
+fly auth login
+fly apps create utm-link-builder            # match the `app` name in fly.toml
+
+# Managed Postgres, attached (sets the DATABASE_URL secret automatically):
+fly postgres create --name utm-link-builder-db
+fly postgres attach utm-link-builder-db
+
+# Secrets (never commit these):
+fly secrets set SESSION_SECRET="$(python -c 'import secrets; print(secrets.token_urlsafe(48))')"
+fly secrets set ADMIN_EMAILS="you@example.com"      # the first admin
+fly secrets set POSTMARK_TOKEN="..."                # or SMTP_* for the SMTP backend
+fly secrets set EMAIL_FROM="UTM link builder <no-reply@yourdomain.com>"
+```
+
+`fly attach` provides `DATABASE_URL` as a `postgres://` URL; the app rewrites it to the `postgresql+psycopg://` driver automatically (`app/config.py`).
+
+### Deploy
+
+```sh
+fly deploy
+```
+
+Each deploy runs `alembic upgrade head` once in a release machine (`release_command` in `fly.toml`) before the new version goes live, so migrations never race across app machines (`RUN_MIGRATIONS_ON_START=0` keeps app boots from re-running them). Fly terminates TLS and forwards `X-Forwarded-*`; the container already runs uvicorn with `--proxy-headers`, and `SESSION_HTTPS_ONLY=1` makes session cookies `Secure`.
+
+Fly's health checks poll `GET /healthz`, which verifies database connectivity (503 when the DB is unreachable).
+
+### First admin and approving users
+
+The address in `ADMIN_EMAILS` is seeded as an approved admin on every boot (additive: it never demotes anyone). Sign in at `/login`, then approve new signups at `/admin`. Others request access at `/signup`.
+
+### Email deliverability (do this before real users)
+
+Magic-link login makes email a hard dependency: if links land in spam, users are locked out. On a cold sending domain, configure DNS auth for whatever provider you use (Postmark or SMTP):
+
+- **SPF** — authorize the provider's servers to send for your domain.
+- **DKIM** — add the provider's signing keys (Postmark shows the exact records).
+- **DMARC** — publish a policy (start at `p=none` to monitor, then tighten).
+
+Warm the domain up with low volume first. Until this is in place, expect links to hit spam.
+
+### Backup and restore
+
+```sh
+# On-demand logical backup:
+fly postgres connect -a utm-link-builder-db
+# ...or dump via a proxy:
+fly proxy 5432 -a utm-link-builder-db &
+pg_dump "$DATABASE_URL" > backup.sql          # restore with: psql "$DATABASE_URL" < backup.sql
+```
+
+Fly Postgres also keeps automatic daily snapshots; see the Fly docs for point-in-time restore.
 
 ## license
 
