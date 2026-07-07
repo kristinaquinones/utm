@@ -11,17 +11,16 @@ fixture then signs in via the dev-login bridge so protected routes are reachable
 
 from __future__ import annotations
 
-import re
-from dataclasses import replace
-
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 
 import app.main as main
 from app.db import Base
-from app.repository import Store, ensure_user
+from app.models import User
+from app.repository import Store, ensure_user, normalize_email
+from app.tokens import create_login_token
 
 
 @pytest.fixture
@@ -37,11 +36,9 @@ def session_factory(tmp_path) -> sessionmaker:
 
 @pytest.fixture
 def bound_db(session_factory: sessionmaker, monkeypatch) -> sessionmaker:
-    # Point every DB touchpoint in the app (middleware, login, store) at the
-    # test database, and enable the dev-login bridge (off by default) so the
-    # client fixture can sign in.
+    # Point every DB touchpoint in the app (middleware, login, store, tokens,
+    # rate limiter) at the test database for the duration of the test.
     monkeypatch.setattr(main, "SessionLocal", session_factory)
-    monkeypatch.setattr(main, "settings", replace(main.settings, dev_login_enabled=True))
     return session_factory
 
 
@@ -67,18 +64,12 @@ def client(anon_client: TestClient, seed_user: str) -> TestClient:
 
 
 def login(client: TestClient, email: str) -> None:
-    """Sign a client in through the dev-login bridge."""
-    token = _login_csrf(client)
-    response = client.post(
-        "/login",
-        data={"csrf_token": token, "email": email},
-        follow_redirects=False,
-    )
+    """Sign a client in by minting a real magic-link token and hitting /auth/callback."""
+    with main.SessionLocal() as db:
+        user = db.execute(
+            select(User).where(User.email == normalize_email(email))
+        ).scalar_one()
+        user_id = user.id
+    raw_token = create_login_token(main.SessionLocal, user_id, 900)
+    response = client.get(f"/auth/callback?token={raw_token}", follow_redirects=False)
     assert response.status_code == 303, response.text
-
-
-def _login_csrf(client: TestClient) -> str:
-    page = client.get("/login")
-    match = re.search(r'name="csrf_token" value="([^"]+)"', page.text)
-    assert match, "no CSRF token on the login form"
-    return match.group(1)

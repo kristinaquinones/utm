@@ -24,10 +24,13 @@ from app.auth import (
     logout_user,
     verify_csrf,
 )
+from app import ratelimit
 from app.config import load_settings
 from app.db import Base, make_session_factory
+from app.mailer import send_login_email, send_pending_email
 from app.models import User
 from app.repository import Store, ensure_user, normalize_email
+from app.tokens import consume_login_token, create_login_token
 from app.utm import (
     BASE_URL_REQUIRED_MSG,
     STANDARD_UTM_KEYS,
@@ -147,28 +150,59 @@ async def login_form(request: Request) -> HTMLResponse:
     return render_login(request)
 
 
-@app.post("/login", response_model=None)
-async def login_submit(
+@app.post("/auth/request-link", response_class=HTMLResponse)
+async def request_link(
     request: Request,
     _: None = Depends(require_csrf),
     email: str = Form(""),
-):
-    # Temporary passwordless bridge; replaced by magic-link login in Phase 2.
-    if not settings.dev_login_enabled:
-        raise HTTPException(status_code=404, detail="Not found")
-
+) -> HTMLResponse:
     normalized = normalize_email(email)
-    with SessionLocal() as db:
-        user = db.execute(select(User).where(User.email == normalized)).scalar_one_or_none()
-        if user is None or user.status != "approved":
-            return render_login(
-                request,
-                error="No approved account for that email.",
-                status_code=400,
-            )
-        login_user(request, user.id, user.session_epoch)
+    client_ip = request.client.host if request.client else "unknown"
 
-    return redirect_home()
+    # Rate-limit per email and per IP (shared Postgres-backed limiter).
+    within_limits = ratelimit.allow(
+        SessionLocal, f"reqlink:email:{normalized}", settings.rate_limit_max, settings.rate_limit_window
+    ) and ratelimit.allow(
+        SessionLocal, f"reqlink:ip:{client_ip}", settings.rate_limit_max, settings.rate_limit_window
+    )
+
+    if within_limits and normalized:
+        with SessionLocal() as db:
+            user = db.execute(
+                select(User).where(User.email == normalized)
+            ).scalar_one_or_none()
+            status = user.status if user else None
+            user_id = user.id if user else None
+
+        if status == "approved":
+            raw_token = create_login_token(SessionLocal, user_id, settings.login_token_ttl)
+            link = f"{settings.base_url}/auth/callback?token={raw_token}"
+            send_login_email(settings, normalized, link)
+        elif status == "pending":
+            # Truthful "still under review" note keeps the response non-enumerable
+            # without leaving a pending applicant in silence.
+            send_pending_email(settings, normalized)
+
+    # Identical response whether the email is approved, pending, unknown, or
+    # rate-limited: no account-enumeration signal.
+    return render_check_email(request)
+
+
+@app.get("/auth/callback", response_class=HTMLResponse)
+async def auth_callback(request: Request, token: str = "") -> HTMLResponse:
+    user_id = consume_login_token(SessionLocal, token)
+    if user_id is not None:
+        with SessionLocal() as db:
+            user = db.execute(select(User).where(User.id == user_id)).scalar_one_or_none()
+            if user is not None and user.status == "approved":
+                login_user(request, user.id, user.session_epoch)
+                return redirect_home()
+
+    return render_login(
+        request,
+        error="That sign-in link is invalid or has expired. Request a new one below.",
+        status_code=400,
+    )
 
 
 @app.post("/logout", response_model=None)
@@ -513,10 +547,17 @@ def render_login(
         {
             "csrf_token": ensure_csrf(request),
             "error": error,
-            "dev_login_enabled": settings.dev_login_enabled,
             "current_user": None,
         },
         status_code=status_code,
+    )
+
+
+def render_check_email(request: Request) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request,
+        "check_email.html",
+        {"current_user": None},
     )
 
 

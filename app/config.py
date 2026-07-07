@@ -40,6 +40,12 @@ def _as_bool(raw: str, default: bool = False) -> bool:
 DEFAULT_SESSION_IDLE_MAX_AGE = 60 * 60 * 24 * 14   # 14 days
 DEFAULT_SESSION_ABSOLUTE_MAX_AGE = 60 * 60 * 24 * 30  # 30 days
 
+# Magic-link login.
+DEFAULT_LOGIN_TOKEN_TTL = 60 * 15  # 15 minutes
+# Rate limit for /auth/request-link, per email and per IP.
+DEFAULT_RATE_LIMIT_MAX = 5
+DEFAULT_RATE_LIMIT_WINDOW = 60 * 15  # 15 minutes
+
 
 @dataclass(frozen=True)
 class Settings:
@@ -55,7 +61,18 @@ class Settings:
     session_https_only: bool
     session_idle_max_age: int
     session_absolute_max_age: int
-    dev_login_enabled: bool
+    email_from: str
+    login_token_ttl: int
+    rate_limit_max: int
+    rate_limit_window: int
+
+    @property
+    def email_backend(self) -> str:
+        if self.postmark_token:
+            return "postmark"
+        if self.smtp_host:
+            return "smtp"
+        return "console"
 
     @property
     def is_sqlite(self) -> bool:
@@ -81,14 +98,6 @@ def load_settings(environ: dict[str, str] | None = None) -> Settings:
     # sessions won't survive a restart. Enforcement lands with the session work.
     session_secret = env.get("SESSION_SECRET") or secrets.token_urlsafe(32)
 
-    # The dev-login bridge is a passwordless "sign in as an approved user" shim.
-    # It is OFF by default (secure by default): local dev opts in with DEV_LOGIN=1,
-    # and it can never be enabled in production, so a forgotten flag on deploy
-    # cannot become an auth bypass. Removed entirely once magic-link lands.
-    dev_login_enabled = _as_bool(env.get("DEV_LOGIN", ""), default=False)
-    if dev_login_enabled and env.get("APP_ENV", "").strip().lower() == "production":
-        raise RuntimeError("DEV_LOGIN must not be enabled when APP_ENV=production")
-
     return Settings(
         database_url=database_url,
         session_secret=session_secret,
@@ -108,5 +117,8 @@ def load_settings(environ: dict[str, str] | None = None) -> Settings:
         session_absolute_max_age=int(
             env.get("SESSION_ABSOLUTE_MAX_AGE", "") or DEFAULT_SESSION_ABSOLUTE_MAX_AGE
         ),
-        dev_login_enabled=dev_login_enabled,
+        email_from=env.get("EMAIL_FROM", "UTM link builder <utm@localhost>"),
+        login_token_ttl=int(env.get("LOGIN_TOKEN_TTL", "") or DEFAULT_LOGIN_TOKEN_TTL),
+        rate_limit_max=int(env.get("RATE_LIMIT_MAX", "") or DEFAULT_RATE_LIMIT_MAX),
+        rate_limit_window=int(env.get("RATE_LIMIT_WINDOW", "") or DEFAULT_RATE_LIMIT_WINDOW),
     )
