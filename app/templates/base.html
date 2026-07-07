@@ -3,6 +3,7 @@ Copyright (C) 2026 Kristina Quinones
 SPDX-License-Identifier: GPL-2.0-only
 #}
 {% from "icons.html" import icon_sun, icon_moon %}
+{% from "macros.html" import csrf_field %}
 <!doctype html>
 <html lang="en">
   <head>
@@ -34,10 +35,19 @@ SPDX-License-Identifier: GPL-2.0-only
             <span class="eyebrow">Local campaign tooling</span>
             <h1 class="page-title">UTM link builder</h1>
           </div>
-          <button type="button" class="btn-icon circle" id="theme-toggle" aria-label="Switch to dark mode" aria-pressed="false">
-            <span id="theme-icon-light">{{ icon_moon() }}</span>
-            <span id="theme-icon-dark" class="hidden">{{ icon_sun() }}</span>
-          </button>
+          <div class="app-header-actions">
+            {% if current_user %}
+            <form method="post" action="/logout" class="logout-form">
+              {{ csrf_field(csrf_token) }}
+              <span class="account-name" title="{{ current_user.email }}">{{ current_user.workspace_name or current_user.email }}</span>
+              <button type="submit" class="btn-text" id="logout-btn">Log out</button>
+            </form>
+            {% endif %}
+            <button type="button" class="btn-icon circle" id="theme-toggle" aria-label="Switch to dark mode" aria-pressed="false">
+              <span id="theme-icon-light">{{ icon_moon() }}</span>
+              <span id="theme-icon-dark" class="hidden">{{ icon_sun() }}</span>
+            </button>
+          </div>
         </div>
       </header>
 

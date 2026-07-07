@@ -1,17 +1,18 @@
 # Copyright (C) 2026 Kristina Quinones
 # SPDX-License-Identifier: GPL-2.0-only
 
-"""Shared fixtures for the route and repository tests.
+"""Shared fixtures for the route, repository, and auth tests.
 
-Each test gets a throwaway SQLite database, a seeded tenant, and a ``Store``
-bound to that tenant. The FastAPI app resolves the current tenant through the
-``get_store`` dependency, so tests inject their store via ``dependency_overrides``
-rather than reaching into a module global.
+Each test gets a throwaway SQLite database that the *whole* app uses: the auth
+middleware, the login route, and the tenant store all read through the module's
+``SessionLocal``, which is repointed at the test database here. The ``client``
+fixture then signs in via the dev-login bridge so protected routes are reachable.
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+import re
+from dataclasses import replace
 
 import pytest
 from fastapi.testclient import TestClient
@@ -35,19 +36,49 @@ def session_factory(tmp_path) -> sessionmaker:
 
 
 @pytest.fixture
-def seed_user(session_factory: sessionmaker) -> str:
-    return ensure_user(session_factory, "owner@example.com", is_admin=True, status="approved")
+def bound_db(session_factory: sessionmaker, monkeypatch) -> sessionmaker:
+    # Point every DB touchpoint in the app (middleware, login, store) at the
+    # test database, and enable the dev-login bridge (off by default) so the
+    # client fixture can sign in.
+    monkeypatch.setattr(main, "SessionLocal", session_factory)
+    monkeypatch.setattr(main, "settings", replace(main.settings, dev_login_enabled=True))
+    return session_factory
 
 
 @pytest.fixture
-def store(session_factory: sessionmaker, seed_user: str) -> Store:
-    return Store(session_factory, seed_user)
+def seed_user(bound_db: sessionmaker) -> str:
+    return ensure_user(bound_db, "owner@example.com", is_admin=True, status="approved")
 
 
 @pytest.fixture
-def client(store: Store) -> Iterator[TestClient]:
-    main.app.dependency_overrides[main.get_store] = lambda: store
-    try:
-        yield TestClient(main.app)
-    finally:
-        main.app.dependency_overrides.pop(main.get_store, None)
+def store(bound_db: sessionmaker, seed_user: str) -> Store:
+    return Store(bound_db, seed_user)
+
+
+@pytest.fixture
+def anon_client(bound_db: sessionmaker) -> TestClient:
+    return TestClient(main.app)
+
+
+@pytest.fixture
+def client(anon_client: TestClient, seed_user: str) -> TestClient:
+    login(anon_client, "owner@example.com")
+    return anon_client
+
+
+def login(client: TestClient, email: str) -> None:
+    """Sign a client in through the dev-login bridge."""
+    token = _login_csrf(client)
+    response = client.post(
+        "/login",
+        data={"csrf_token": token, "email": email},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303, response.text
+
+
+def _login_csrf(client: TestClient) -> str:
+    page = client.get("/login")
+    match = re.search(r'name="csrf_token" value="([^"]+)"', page.text)
+    assert match, "no CSRF token on the login form"
+    return match.group(1)

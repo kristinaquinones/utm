@@ -1115,3 +1115,54 @@ p {
     justify-content: center;
   }
 }
+
+/* Account area (header) and login page */
+.app-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.logout-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.account-name {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  max-width: 22ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.btn-text {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--text-link);
+}
+
+.btn-text:hover {
+  text-decoration: underline;
+}
+
+.login-wrap {
+  max-width: 420px;
+  margin: 48px auto;
+}
+
+.login-card .card-section {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.login-note {
+  margin-top: 4px;
+}
