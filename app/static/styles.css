@@ -1166,3 +1166,71 @@ p {
 .login-note {
   margin-top: 4px;
 }
+
+/* Admin queue */
+.admin-wrap {
+  max-width: 860px;
+  margin: 0 auto;
+}
+
+.admin-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.admin-table-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.admin-table th,
+.admin-table td {
+  text-align: left;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border-subtle);
+  white-space: nowrap;
+}
+
+.admin-table th {
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.admin-table tbody tr:last-child td,
+.admin-table tr:last-child td {
+  border-bottom: none;
+}
+
+.admin-actions-col {
+  text-align: right;
+}
+
+.admin-row-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.admin-row-actions form {
+  display: inline;
+}
+
+.btn-primary.compact {
+  padding: 6px 12px;
+  font-size: 0.85rem;
+}
+
+.field-optional {
+  color: var(--text-muted);
+  font-weight: 400;
+}

@@ -24,12 +24,17 @@ from app.auth import (
     logout_user,
     verify_csrf,
 )
-from app import ratelimit
+from app import accounts, ratelimit
 from app.config import load_settings
 from app.db import Base, make_session_factory
-from app.mailer import send_login_email, send_pending_email
+from app.mailer import (
+    send_approval_email,
+    send_login_email,
+    send_pending_email,
+    send_signup_notification,
+)
 from app.models import User
-from app.repository import Store, ensure_user, normalize_email
+from app.repository import Store, normalize_email
 from app.tokens import consume_login_token, create_login_token
 from app.utm import (
     BASE_URL_REQUIRED_MSG,
@@ -50,18 +55,12 @@ engine, SessionLocal = make_session_factory(settings)
 
 
 def seed_admin() -> str:
-    """Ensure the configured admins exist; return the first admin's id.
+    """Ensure the configured admins exist as approved admins; return the first id.
 
-    Phase 0 has no login yet, so a single seeded user stands in as the current
-    tenant. Phase 1 replaces ``get_store``'s body with the session user; the
-    routes already derive their tenant from the dependency, so they won't change.
+    Additive: promotes each ADMIN_EMAILS address to admin + approved (including
+    someone who signed up first and is still pending) and never demotes anyone.
     """
-    first_id = ""
-    for index, email in enumerate(settings.seed_admin_emails):
-        user_id = ensure_user(SessionLocal, email, is_admin=True, status="approved")
-        if index == 0:
-            first_id = user_id
-    return first_id
+    return accounts.promote_admins(SessionLocal, settings.seed_admin_emails)
 
 
 @asynccontextmanager
@@ -150,6 +149,38 @@ async def login_form(request: Request) -> HTMLResponse:
     return render_login(request)
 
 
+@app.get("/signup", response_class=HTMLResponse)
+async def signup_form(request: Request) -> HTMLResponse:
+    return render_signup(request)
+
+
+@app.post("/signup", response_class=HTMLResponse)
+async def signup_submit(
+    request: Request,
+    _: None = Depends(require_csrf),
+    email: str = Form(""),
+    workspace_name: str = Form(""),
+) -> HTMLResponse:
+    normalized = normalize_email(email)
+    client_ip = request.client.host if request.client else "unknown"
+
+    within_limits = ratelimit.allow(
+        SessionLocal, f"signup:email:{normalized}", settings.rate_limit_max, settings.rate_limit_window
+    ) and ratelimit.allow(
+        SessionLocal, f"signup:ip:{client_ip}", settings.rate_limit_max, settings.rate_limit_window
+    )
+
+    if within_limits and normalized:
+        created = accounts.signup(SessionLocal, normalized, workspace_name)
+        if created:
+            for admin_email in accounts.admin_emails(SessionLocal):
+                send_signup_notification(settings, admin_email, normalized)
+
+    # Identical response whether or not the account is new, so signup can't be
+    # used to probe which emails already have accounts.
+    return render_signup(request, submitted=True)
+
+
 @app.post("/auth/request-link", response_class=HTMLResponse)
 async def request_link(
     request: Request,
@@ -209,6 +240,37 @@ async def auth_callback(request: Request, token: str = "") -> HTMLResponse:
 async def logout(request: Request, _: None = Depends(require_csrf)) -> RedirectResponse:
     logout_user(request)
     return RedirectResponse("/login", status_code=303)
+
+
+@app.get("/admin", response_class=HTMLResponse)
+async def admin_queue(
+    request: Request, admin: dict[str, Any] = Depends(require_admin)
+) -> HTMLResponse:
+    return render_admin(request)
+
+
+@app.post("/admin/users/{user_id}/approve", response_model=None)
+async def admin_approve(
+    request: Request,
+    user_id: str,
+    admin: dict[str, Any] = Depends(require_admin),
+    _: None = Depends(require_csrf),
+) -> RedirectResponse:
+    user = accounts.set_status(SessionLocal, user_id, "approved", approved_by=admin["id"])
+    if user is not None:
+        send_approval_email(settings, user["email"])
+    return RedirectResponse("/admin", status_code=303)
+
+
+@app.post("/admin/users/{user_id}/deny", response_model=None)
+async def admin_deny(
+    request: Request,
+    user_id: str,
+    admin: dict[str, Any] = Depends(require_admin),
+    _: None = Depends(require_csrf),
+) -> RedirectResponse:
+    accounts.set_status(SessionLocal, user_id, "denied")
+    return RedirectResponse("/admin", status_code=303)
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -558,6 +620,34 @@ def render_check_email(request: Request) -> HTMLResponse:
         request,
         "check_email.html",
         {"current_user": None},
+    )
+
+
+def render_signup(
+    request: Request, submitted: bool = False, error: str | None = None, status_code: int = 200
+) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request,
+        "signup.html",
+        {
+            "csrf_token": ensure_csrf(request),
+            "submitted": submitted,
+            "error": error,
+            "current_user": None,
+        },
+        status_code=status_code,
+    )
+
+
+def render_admin(request: Request) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request,
+        "admin.html",
+        {
+            "csrf_token": ensure_csrf(request),
+            "current_user": getattr(request.state, "user", None),
+            "pending_users": accounts.list_pending_users(SessionLocal),
+        },
     )
 
 

@@ -36,6 +36,24 @@ def send_login_email(settings: Settings, to: str, link: str) -> None:
     _send(settings, to, subject, body)
 
 
+def send_signup_notification(settings: Settings, to: str, applicant_email: str) -> None:
+    subject = "New access request"
+    body = (
+        f"{applicant_email} has requested access to the UTM link builder.\n\n"
+        f"Review pending requests at {settings.base_url}/admin"
+    )
+    _send(settings, to, subject, body)
+
+
+def send_approval_email(settings: Settings, to: str) -> None:
+    subject = "Your access request was approved"
+    body = (
+        "Good news: your account has been approved.\n\n"
+        f"Sign in at {settings.base_url}/login and we'll email you a link."
+    )
+    _send(settings, to, subject, body)
+
+
 def send_pending_email(settings: Settings, to: str) -> None:
     subject = "Your access request is under review"
     body = (

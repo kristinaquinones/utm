@@ -1,0 +1,59 @@
+{#
+Copyright (C) 2026 Kristina Quinones
+SPDX-License-Identifier: GPL-2.0-only
+#}
+{% extends "base.html" %}
+{% from "macros.html" import csrf_field %}
+
+{% block title %}Admin · UTM link builder{% endblock %}
+
+{% block nav %}{% endblock %}
+
+{% block content %}
+  <div class="main-pad">
+    <div class="admin-wrap">
+      <div class="admin-head">
+        <h2 class="page-heading">Pending access requests</h2>
+        <a href="/" class="btn-outline compact">Back to app</a>
+      </div>
+
+      {% if pending_users %}
+      <div class="admin-table-scroll">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th scope="col">email</th>
+              <th scope="col">workspace</th>
+              <th scope="col">requested</th>
+              <th scope="col" class="admin-actions-col">actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for user in pending_users %}
+            <tr>
+              <td>{{ user.email }}</td>
+              <td>{{ user.workspace_name or "—" }}</td>
+              <td>{{ user.created_at }}</td>
+              <td>
+                <div class="admin-row-actions">
+                  <form method="post" action="/admin/users/{{ user.id }}/approve">
+                    {{ csrf_field(csrf_token) }}
+                    <button type="submit" class="btn-primary compact">Approve</button>
+                  </form>
+                  <form method="post" action="/admin/users/{{ user.id }}/deny">
+                    {{ csrf_field(csrf_token) }}
+                    <button type="submit" class="btn-outline danger compact">Deny</button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="empty-state-title">No pending requests.</p>
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}
