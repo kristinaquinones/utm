@@ -1,0 +1,46 @@
+{#
+Copyright (C) 2026 Kristina Quinones
+SPDX-License-Identifier: GPL-2.0-only
+#}
+{% extends "base.html" %}
+{% from "macros.html" import csrf_field %}
+
+{% block title %}Settings · {{ brand_name }}{% endblock %}
+
+{% block nav %}{% endblock %}
+
+{% block content %}
+  <div class="main-pad">
+    <div class="login-wrap">
+      <form class="card login-card" method="post" action="/settings">
+        {{ csrf_field(csrf_token) }}
+        <div class="card-section">
+          <h2 class="card-heading">Workspace settings</h2>
+          <p class="section-sub">Personalize your workspace name and accent color.</p>
+
+          {% if saved %}
+          <p class="form-success" role="status">Saved.</p>
+          {% endif %}
+
+          <div>
+            <label class="field-label" for="settings-workspace">workspace name <span class="field-optional">(optional)</span></label>
+            <input id="settings-workspace" class="f-input" name="workspace_name" type="text" maxlength="120" value="{{ workspace_name }}" placeholder="UTM link builder">
+          </div>
+
+          <div>
+            <label class="field-label" for="settings-accent">accent color <span class="field-optional">(optional)</span></label>
+            <div class="accent-field">
+              <input id="settings-accent" class="f-input" name="accent_color" type="text" value="{{ accent_color }}" placeholder="#be7350" pattern="#?[0-9a-fA-F]{3}|#?[0-9a-fA-F]{6}" aria-describedby="accent-help">
+              {% if accent_color %}
+              <span class="accent-swatch" style="background: {{ accent_color }}" aria-hidden="true"></span>
+              {% endif %}
+            </div>
+            <p id="accent-help" class="section-sub login-note">A hex color like <code>#be7350</code>. Leave blank to use the default theme.</p>
+          </div>
+
+          <button type="submit" class="btn-primary">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+{% endblock %}

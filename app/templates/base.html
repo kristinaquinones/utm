@@ -9,7 +9,7 @@ SPDX-License-Identifier: GPL-2.0-only
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{% block title %}UTM link builder{% endblock %}</title>
+    <title>{% block title %}{{ brand_name }}{% endblock %}</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔗</text></svg>">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -22,6 +22,18 @@ SPDX-License-Identifier: GPL-2.0-only
       } catch (e) {}
     </script>
     <link rel="stylesheet" href="{{ url_for('static', path='/styles.css') }}">
+    {% if brand_style %}
+    <style>
+      :root {
+        {% for prop, val in brand_style.light.items() %}{{ prop }}: {{ val }};
+        {% endfor %}
+      }
+      :root[data-theme="dark"] {
+        {% for prop, val in brand_style.dark.items() %}{{ prop }}: {{ val }};
+        {% endfor %}
+      }
+    </style>
+    {% endif %}
     <meta name="csrf-token" content="{{ csrf_token }}">
   </head>
   <body>
@@ -32,12 +44,15 @@ SPDX-License-Identifier: GPL-2.0-only
       <header class="app-header">
         <div class="app-header-inner">
           <div>
-            <span class="eyebrow">Local campaign tooling</span>
-            <h1 class="page-title">UTM link builder</h1>
+            <span class="eyebrow">Campaign tooling</span>
+            <h1 class="page-title">{{ brand_name }}</h1>
           </div>
           <div class="app-header-actions">
             {% if current_user and current_user.is_admin %}
             <a href="/admin" class="btn-text">Admin</a>
+            {% endif %}
+            {% if current_user %}
+            <a href="/settings" class="btn-text">Settings</a>
             {% endif %}
             {% if current_user %}
             <form method="post" action="/logout" class="logout-form">

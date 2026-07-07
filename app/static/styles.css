@@ -1234,3 +1234,24 @@ p {
   color: var(--text-muted);
   font-weight: 400;
 }
+
+/* Settings: accent field + save confirmation */
+.accent-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.accent-swatch {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  flex: none;
+}
+
+.form-success {
+  color: var(--clay-600);
+  font-weight: 600;
+  font-size: 0.9rem;
+}
