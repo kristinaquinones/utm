@@ -12,11 +12,11 @@ SPDX-License-Identifier: GPL-2.0-only
 {% block content %}
   <div class="main-pad">
     <div class="login-wrap">
-      <form class="card login-card" method="post" action="/login">
+      <form class="card login-card" method="post" action="/auth/request-link">
         {{ csrf_field(csrf_token) }}
         <div class="card-section">
           <h2 class="card-heading">Sign in</h2>
-          <p class="section-sub">Enter the email for your workspace.</p>
+          <p class="section-sub">Enter your email and we'll send you a secure sign-in link.</p>
 
           {% if error %}
           <p class="form-error" role="alert">{{ error }}</p>
@@ -27,13 +27,11 @@ SPDX-License-Identifier: GPL-2.0-only
             <input id="login-email" class="f-input" name="email" type="email" autocomplete="email" required autofocus>
           </div>
 
-          <button type="submit" class="btn-primary">Continue</button>
+          <button type="submit" class="btn-primary">Email me a sign-in link</button>
 
-          {% if dev_login_enabled %}
           <p class="section-sub login-note">
-            Temporary passwordless sign-in for approved accounts. Magic-link login is coming in a later release.
+            No password needed. The link expires shortly and can be used once.
           </p>
-          {% endif %}
         </div>
       </form>
     </div>

@@ -94,3 +94,20 @@ class Template(Base):
     updated_at: Mapped[str] = mapped_column(String(32), nullable=False)
 
     __table_args__ = (Index("ix_templates_user_id", "user_id"),)
+
+
+class RateEvent(Base):
+    """Append-only rate-limit log.
+
+    Shared across workers/instances (a Postgres table, not an in-process counter),
+    so the limit holds no matter which process serves the request. Each attempt is
+    one row; a bucket is over the limit when it has >= max rows inside the window.
+    """
+
+    __tablename__ = "rate_events"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    bucket: Mapped[str] = mapped_column(String(200), nullable=False)
+    created_ts: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    __table_args__ = (Index("ix_rate_events_bucket_ts", "bucket", "created_ts"),)

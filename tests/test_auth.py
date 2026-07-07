@@ -72,30 +72,12 @@ def test_login_then_logout(anon_client, seed_user) -> None:
     assert anon_client.get("/", follow_redirects=False).status_code == 303
 
 
-def test_login_rejects_unapproved_email(anon_client, bound_db) -> None:
-    ensure_user(bound_db, "pending@example.com", status="pending")
-
-    token = re.search(
-        r'name="csrf_token" value="([^"]+)"', anon_client.get("/login").text
-    ).group(1)
-    response = anon_client.post(
-        "/login",
-        data={"csrf_token": token, "email": "pending@example.com"},
-        follow_redirects=False,
-    )
-
-    assert response.status_code == 400
-    assert "No approved account" in response.text
-    # No session was established.
-    assert anon_client.get("/", follow_redirects=False).status_code == 303
-
-
 # -- CSRF --------------------------------------------------------------------
 
 
-def test_login_post_requires_anonymous_csrf(anon_client, seed_user) -> None:
+def test_request_link_requires_anonymous_csrf(anon_client, seed_user) -> None:
     # No CSRF token issued to this request -> rejected before any session exists.
-    response = anon_client.post("/login", data={"email": "owner@example.com"})
+    response = anon_client.post("/auth/request-link", data={"email": "owner@example.com"})
     assert response.status_code == 403
 
 

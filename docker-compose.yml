@@ -31,9 +31,11 @@ services:
       DATABASE_URL: postgresql+psycopg://utm:utm@db:5432/utm
       ADMIN_EMAILS: admin@localhost
       SESSION_SECRET: dev-secret-change-me
-      # Passwordless local sign-in until magic-link lands. Off by default; this
-      # opt-in is local-dev only and is refused when APP_ENV=production.
-      DEV_LOGIN: "1"
+      # Public base URL used to build magic-link callbacks in emails.
+      BASE_URL: https://utm.linkbuilder
+      # No POSTMARK_TOKEN/SMTP_HOST in local dev, so email falls back to the
+      # console backend: the sign-in link is printed to `docker compose logs utm`.
+      EMAIL_FROM: UTM link builder <utm@localhost>
     depends_on:
       db:
         condition: service_healthy
