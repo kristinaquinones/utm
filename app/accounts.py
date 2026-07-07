@@ -25,6 +25,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
 
+from app.branding import normalize_hex
 from app.db import now_iso
 from app.models import User
 from app.repository import normalize_email
@@ -37,6 +38,7 @@ def _user_dict(user: User) -> dict[str, Any]:
         "status": user.status,
         "is_admin": user.is_admin,
         "workspace_name": user.workspace_name,
+        "accent_color": user.accent_color,
         "created_at": user.created_at,
         "approved_at": user.approved_at,
         "approved_by": user.approved_by,
@@ -101,6 +103,26 @@ def set_status(
         if status == "approved":
             user.approved_at = now_iso()
             user.approved_by = approved_by
+        db.commit()
+        return _user_dict(user)
+
+
+def update_branding(
+    session_factory: sessionmaker,
+    user_id: str,
+    workspace_name: str,
+    accent_color: str,
+) -> dict[str, Any] | None:
+    """Save a user's own branding. Accent is stored only if it's a valid hex."""
+    with session_factory() as db:
+        user = db.execute(select(User).where(User.id == user_id)).scalar_one_or_none()
+        if user is None:
+            return None
+        user.workspace_name = workspace_name.strip()[:120] or None
+        # normalize_hex returns None for anything that isn't a valid color, so a
+        # junk value simply clears branding rather than being stored.
+        user.accent_color = normalize_hex(accent_color)
+        user.updated_at = now_iso()
         db.commit()
         return _user_dict(user)
 

@@ -24,7 +24,7 @@ from app.auth import (
     logout_user,
     verify_csrf,
 )
-from app import accounts, ratelimit
+from app import accounts, branding, ratelimit
 from app.config import load_settings
 from app.db import Base, make_session_factory
 from app.mailer import (
@@ -75,7 +75,21 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="UTM link builder", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
-templates = Jinja2Templates(directory="app/templates")
+def branding_context(request: Request) -> dict[str, Any]:
+    """Make the current tenant's brand available to every template.
+
+    Reads the user validated by the auth gate; on exempt pages (login, signup)
+    there is no user, so the neutral defaults apply.
+    """
+    user = getattr(request.state, "user", None)
+    accent = user.get("accent_color") if user else None
+    return {
+        "brand_name": branding.brand_name(user),
+        "brand_style": branding.build_brand_style(accent),
+    }
+
+
+templates = Jinja2Templates(directory="app/templates", context_processors=[branding_context])
 
 
 @app.middleware("http")
@@ -271,6 +285,32 @@ async def admin_deny(
 ) -> RedirectResponse:
     accounts.set_status(SessionLocal, user_id, "denied")
     return RedirectResponse("/admin", status_code=303)
+
+
+@app.get("/settings", response_class=HTMLResponse)
+async def settings_form(
+    request: Request, user: dict[str, Any] = Depends(require_user)
+) -> HTMLResponse:
+    return render_settings(request, user)
+
+
+@app.post("/settings", response_model=None)
+async def settings_save(
+    request: Request,
+    user: dict[str, Any] = Depends(require_user),
+    _: None = Depends(require_csrf),
+    workspace_name: str = Form(""),
+    accent_color: str = Form(""),
+) -> HTMLResponse:
+    accounts.update_branding(SessionLocal, user["id"], workspace_name, accent_color)
+    # Reflect the saved values on request.state.user so the branding context
+    # processor applies the new name/accent to this very response.
+    request.state.user = {
+        **user,
+        "workspace_name": workspace_name.strip()[:120] or None,
+        "accent_color": branding.normalize_hex(accent_color),
+    }
+    return render_settings(request, request.state.user, saved=True)
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -647,6 +687,22 @@ def render_admin(request: Request) -> HTMLResponse:
             "csrf_token": ensure_csrf(request),
             "current_user": getattr(request.state, "user", None),
             "pending_users": accounts.list_pending_users(SessionLocal),
+        },
+    )
+
+
+def render_settings(
+    request: Request, user: dict[str, Any], saved: bool = False
+) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request,
+        "settings.html",
+        {
+            "csrf_token": ensure_csrf(request),
+            "current_user": user,
+            "workspace_name": user.get("workspace_name") or "",
+            "accent_color": user.get("accent_color") or "",
+            "saved": saved,
         },
     )
 
