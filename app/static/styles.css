@@ -1255,3 +1255,39 @@ p {
   font-weight: 600;
   font-size: 0.9rem;
 }
+
+/* Admin moderation: status pills + audit layout */
+.admin-head-section {
+  margin-top: 28px;
+}
+
+.status-pill {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: capitalize;
+  border: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+}
+
+.status-approved { color: #2f7a4d; border-color: rgba(47, 122, 77, 0.4); }
+.status-pending  { color: #9a6a1a; border-color: rgba(154, 106, 26, 0.4); }
+.status-denied   { color: #a23b3b; border-color: rgba(162, 59, 59, 0.4); }
+.status-admin    { color: var(--clay-600); border-color: var(--accent-border); }
+
+.audit-account {
+  margin-bottom: 8px;
+}
+
+.audit-url {
+  max-width: 420px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.audit-url a {
+  color: var(--text-link);
+}

@@ -111,3 +111,23 @@ class RateEvent(Base):
     created_ts: Mapped[int] = mapped_column(Integer, nullable=False)
 
     __table_args__ = (Index("ix_rate_events_bucket_ts", "bucket", "created_ts"),)
+
+
+class AdminAction(Base):
+    """Append-only audit trail of admin moderation actions.
+
+    Records who did what to whom (suspend, reinstate, content takedown) so
+    cross-tenant admin power is accountable. No foreign keys: the log must
+    outlive any row it references.
+    """
+
+    __tablename__ = "admin_actions"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    admin_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    action: Mapped[str] = mapped_column(String(32), nullable=False)
+    target_user_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    detail: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    created_ts: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    __table_args__ = (Index("ix_admin_actions_created_ts", "created_ts"),)

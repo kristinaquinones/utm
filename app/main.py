@@ -270,8 +270,10 @@ async def admin_approve(
     admin: dict[str, Any] = Depends(require_admin),
     _: None = Depends(require_csrf),
 ) -> RedirectResponse:
+    # Also the "reinstate" action for a suspended user.
     user = accounts.set_status(SessionLocal, user_id, "approved", approved_by=admin["id"])
     if user is not None:
+        accounts.log_admin_action(SessionLocal, admin["id"], "approve", user_id, user["email"])
         send_approval_email(settings, user["email"])
     return RedirectResponse("/admin", status_code=303)
 
@@ -283,8 +285,53 @@ async def admin_deny(
     admin: dict[str, Any] = Depends(require_admin),
     _: None = Depends(require_csrf),
 ) -> RedirectResponse:
-    accounts.set_status(SessionLocal, user_id, "denied")
+    # Denies a pending applicant or suspends an approved user (both set "denied",
+    # which blocks access on the next request). Admins are refused by set_status.
+    user = accounts.set_status(SessionLocal, user_id, "denied")
+    if user is not None:
+        accounts.log_admin_action(SessionLocal, admin["id"], "suspend", user_id, user["email"])
     return RedirectResponse("/admin", status_code=303)
+
+
+@app.get("/admin/users/{user_id}", response_class=HTMLResponse)
+async def admin_user_detail(
+    request: Request,
+    user_id: str,
+    admin: dict[str, Any] = Depends(require_admin),
+) -> HTMLResponse:
+    target = accounts.get_user(SessionLocal, user_id)
+    if target is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    return render_admin_user(request, target)
+
+
+@app.post("/admin/users/{user_id}/links/{link_id}/delete", response_model=None)
+async def admin_delete_link(
+    request: Request,
+    user_id: str,
+    link_id: str,
+    admin: dict[str, Any] = Depends(require_admin),
+    _: None = Depends(require_csrf),
+) -> RedirectResponse:
+    # A Store scoped to the *target* tenant: still a single-user-scoped query, the
+    # admin just chooses whose. Deleting a foreign link is impossible; only this
+    # user's link with this id is removed.
+    if Store(SessionLocal, user_id).delete_link(link_id):
+        accounts.log_admin_action(SessionLocal, admin["id"], "delete_link", user_id, link_id)
+    return RedirectResponse(f"/admin/users/{user_id}", status_code=303)
+
+
+@app.post("/admin/users/{user_id}/templates/{template_id}/delete", response_model=None)
+async def admin_delete_template(
+    request: Request,
+    user_id: str,
+    template_id: str,
+    admin: dict[str, Any] = Depends(require_admin),
+    _: None = Depends(require_csrf),
+) -> RedirectResponse:
+    if Store(SessionLocal, user_id).delete_template(template_id):
+        accounts.log_admin_action(SessionLocal, admin["id"], "delete_template", user_id, template_id)
+    return RedirectResponse(f"/admin/users/{user_id}", status_code=303)
 
 
 @app.get("/settings", response_class=HTMLResponse)
@@ -687,6 +734,22 @@ def render_admin(request: Request) -> HTMLResponse:
             "csrf_token": ensure_csrf(request),
             "current_user": getattr(request.state, "user", None),
             "pending_users": accounts.list_pending_users(SessionLocal),
+            "all_users": accounts.list_all_users(SessionLocal),
+        },
+    )
+
+
+def render_admin_user(request: Request, target: dict[str, Any]) -> HTMLResponse:
+    store = Store(SessionLocal, target["id"])
+    return templates.TemplateResponse(
+        request,
+        "admin_user.html",
+        {
+            "csrf_token": ensure_csrf(request),
+            "current_user": getattr(request.state, "user", None),
+            "target": target,
+            "target_links": store.list_links(),
+            "target_templates": store.list_templates(),
         },
     )
 
